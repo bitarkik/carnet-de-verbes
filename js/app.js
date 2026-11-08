@@ -2,16 +2,16 @@
 // Carnet de Verbes — Clean Accordion Notebook Controller (Muse-Inspired)
 // ==========================================================================
 
-import { lookupOfflineVerb, extractOfflineVerbsFromText } from "./french-engine.js?v=12";
+import { lookupOfflineVerb, extractOfflineVerbsFromText } from "./french-engine.js?v=13";
 import {
   testGeminiKey,
   lookupVerbWithAI,
   extractVerbsFromScreenshots,
   extractVerbsFromWordTextWithAI
-} from "./ai.js?v=12";
-import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=12";
-import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=12";
-import { createPracticeController } from "./practice.js?v=12";
+} from "./ai.js?v=13";
+import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=13";
+import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=13";
+import { createPracticeController } from "./practice.js?v=13";
 
 const TENSES = [
   { key: "present", label: "Présent" },
@@ -929,7 +929,7 @@ function init() {
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register("./sw.js?v=12")
+        .register("./sw.js?v=13")
         .then((reg) => {
           reg.update().catch(() => {});
           // Listen for updates and automatically refresh if new version found

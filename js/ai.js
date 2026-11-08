@@ -2,11 +2,11 @@
 // Live Google Gemini AI Integration (Verb Lookup, Screenshot Vision, Word Import)
 // ==========================================================================
 
-// Modern Gemini 3.x Flash series models ONLY (all legacy 2.x models removed)
+// Modern Gemini 3.x Flash series models ordered by free-tier quota (500 RPD vs 20 RPD)
 const MODELS = [
-  "gemini-3.8-flash",      // Primary recommended model
-  "gemini-3.6-flash",      // Backup 1
-  "gemini-3.5-flash-lite"  // Backup 2
+  "gemini-3.5-flash-lite", // Primary: 500 requests/day & 15 requests/min (high quota, ultra-fast ~1s)
+  "gemini-3.8-flash",      // Fallback 1: High quality reasoning (20 requests/day free tier)
+  "gemini-3.6-flash"       // Fallback 2: (20 requests/day free tier)
 ];
 
 const VERB_ENTRY_SCHEMA_PROMPT = `
