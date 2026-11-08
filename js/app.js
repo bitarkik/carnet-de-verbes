@@ -160,6 +160,13 @@ function upsertVerb(verbObj, { select = true } = {}) {
   const existing = verbs.find((v) => v.infinitive.toLowerCase() === infKey);
   if (existing) {
     if (verbObj.duolingoContext) existing.duolingoContext = verbObj.duolingoContext;
+    if (verbObj.meaning) existing.meaning = verbObj.meaning;
+    if (verbObj.group) existing.group = verbObj.group;
+    if (verbObj.auxiliary) existing.auxiliary = verbObj.auxiliary;
+    if (verbObj.pastParticiple) existing.pastParticiple = verbObj.pastParticiple;
+    if (verbObj.tenses && Object.keys(verbObj.tenses).length) existing.tenses = verbObj.tenses;
+    if (verbObj.duolingoTips) existing.duolingoTips = { ...existing.duolingoTips, ...verbObj.duolingoTips };
+    if (verbObj.quiz) existing.quiz = verbObj.quiz;
     existing.updatedAt = now;
     if (select) openVerbId = existing.infinitive;
     persistAndScheduleSync();
@@ -281,7 +288,7 @@ function getFilteredVerbs() {
     if (activeFilter === "reflexive" && !v.isReflexive) return false;
 
     if (!q) return true;
-    if (v.infinitive.toLowerCase().includes(q) || v.meaning.toLowerCase().includes(q) || (v.note || "").toLowerCase().includes(q)) {
+    if ((v.infinitive || "").toLowerCase().includes(q) || (v.meaning || "").toLowerCase().includes(q) || (v.note || "").toLowerCase().includes(q)) {
       return true;
     }
     return Object.values(v.tenses || {}).some((arr) =>
@@ -847,6 +854,27 @@ function init() {
   render();
   updateDrawerNotes();
   if (settings.githubToken) runCloudSync({ quiet: true });
+
+  // Register Service Worker for offline PWA functionality & installability
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker
+        .register("./sw.js")
+        .then((reg) => {
+          // Listen for updates and automatically refresh if new version found
+          reg.addEventListener("updatefound", () => {
+            const newWorker = reg.installing;
+            if (!newWorker) return;
+            newWorker.addEventListener("statechange", () => {
+              if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
+                console.log("New version of Carnet de Verbes installed.");
+              }
+            });
+          });
+        })
+        .catch((err) => console.warn("ServiceWorker registration failed:", err));
+    });
+  }
 }
 
 init();

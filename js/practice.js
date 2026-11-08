@@ -12,6 +12,15 @@ export function createPracticeController({ getVerbs, speakFrench, onSwitchToNote
 
   const $ = (id) => document.getElementById(id);
 
+  let order = [];
+
+  function ensureOrder() {
+    const verbs = getVerbs();
+    if (order.length !== verbs.length) {
+      order = verbs.map((_, i) => i).sort(() => Math.random() - 0.5);
+    }
+  }
+
   function ensureQuizSpec(v) {
     if (v.quiz && v.quiz.sentence && v.quiz.answer) return v.quiz;
     const pp = v.pastParticiple || v.infinitive;
@@ -36,10 +45,12 @@ export function createPracticeController({ getVerbs, speakFrench, onSwitchToNote
       return;
     }
 
+    ensureOrder();
     emptyEl?.classList.add("hidden");
     activeEl?.classList.remove("hidden");
 
-    const v = verbs[index % verbs.length];
+    const vIdx = order[index % order.length] ?? 0;
+    const v = verbs[vIdx] || verbs[0];
     $("quiz-score-badge").textContent = `Score: ${correct} / ${total}`;
     $("quiz-mode-toggle-btn").textContent = mode === "fill" ? "Switch to Flashcards" : "Switch to Fill-in-Blank";
 
@@ -84,7 +95,15 @@ export function createPracticeController({ getVerbs, speakFrench, onSwitchToNote
       .toLowerCase()
       .trim()
       .replace(/’/g, "'")
-      .replace(/\s+/g, " ");
+      .replace(/\s+/g, " ")
+      .replace(/[.,!?«»"“”]/g, "");
+  }
+
+  function stripSubjectPronoun(s) {
+    return normalizeAns(s)
+      .replace(/^(je|tu|il|elle|on|nous|vous|ils|elles)\s+/i, "")
+      .replace(/^j'/i, "")
+      .trim();
   }
 
   function submitAnswer() {
@@ -99,10 +118,16 @@ export function createPracticeController({ getVerbs, speakFrench, onSwitchToNote
     const userVal = normalizeAns(input.value);
     if (!userVal) return;
 
-    const v = verbs[index % verbs.length];
+    ensureOrder();
+    const vIdx = order[index % order.length] ?? 0;
+    const v = verbs[vIdx] || verbs[0];
     const q = ensureQuizSpec(v);
     const valid = [q.answer, ...(q.altAnswers || [])].map(normalizeAns);
-    const isRight = valid.includes(userVal);
+    const validBares = valid.map(stripSubjectPronoun).filter(Boolean);
+    const userBare = stripSubjectPronoun(userVal);
+
+    // Tolerant match: accepts exact match or bare verb form if user omitted/included pronoun
+    const isRight = valid.includes(userVal) || (userBare && validBares.includes(userBare));
 
     answered = true;
     total += 1;
@@ -125,7 +150,11 @@ export function createPracticeController({ getVerbs, speakFrench, onSwitchToNote
     const verbs = getVerbs();
     if (!verbs.length) return;
     flipped = false;
-    index = (index + 1) % verbs.length;
+    index = index + 1;
+    if (index >= order.length) {
+      order = verbs.map((_, i) => i).sort(() => Math.random() - 0.5);
+      index = 0;
+    }
     render();
   }
 

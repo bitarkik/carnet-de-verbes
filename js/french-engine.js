@@ -567,8 +567,8 @@ const SPECS = {
 };
 
 // Build full offline dictionary + automatic reverse conjugated lookup index
-const OFFLINE_DICTIONARY = {};
-const CONJUGATED_INDEX = {};
+export const OFFLINE_DICTIONARY = {};
+export const CONJUGATED_INDEX = {};
 
 for (const [inf, spec] of Object.entries(SPECS)) {
   const entry = buildFromSpec(inf, spec);
@@ -578,7 +578,10 @@ for (const [inf, spec] of Object.entries(SPECS)) {
     for (const rawForm of forms) {
       if (rawForm.startsWith("—")) continue;
       const cleanFull = rawForm.replace(/\*/g, "").replace(/\(e\)|\(s\)/g, "").toLowerCase().trim();
-      CONJUGATED_INDEX[cleanFull] = inf;
+      // First-wins ensures higher-priority core verbs (like être) take precedence over verbs like suivre
+      if (!CONJUGATED_INDEX[cleanFull]) {
+        CONJUGATED_INDEX[cleanFull] = inf;
+      }
 
       // Also index bare verb token(s) without subject pronoun
       const withoutSubj = cleanFull
@@ -670,7 +673,7 @@ export function lookupOfflineVerb(rawInput) {
     ok: false,
     needsAI: looksVerbish,
     reason: looksVerbish
-      ? `“${rawInput.trim()}” isn't in the 75-verb offline starter pack yet — connect your free Gemini API key in Settings to generate any of 12,000+ French verbs!`
+      ? `“${rawInput.trim()}” isn't in the 90+ verb offline starter pack yet — connect your free Gemini API key in Settings to generate any of 12,000+ French verbs!`
       : `“${rawInput.trim()}” doesn't look like a French verb (nothing fake saved!). Connect Gemini AI in Settings if it's a rare conjugated form.`
   };
 }

@@ -63,7 +63,7 @@ Important formatting rules:
 async function callGemini(apiKey, contents) {
   let lastErr = null;
   for (const model of MODELS) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
     
     // Set up generation config with low thinking level so model doesn't spend 20+ seconds overthinking a verb
     const generationConfig = {
@@ -79,7 +79,10 @@ async function callGemini(apiKey, contents) {
     try {
       const res = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey
+        },
         signal: controller.signal,
         body: JSON.stringify({
           contents,

@@ -1,4 +1,4 @@
-const CACHE_NAME = "carnet-de-verbes-v6";
+const CACHE_NAME = "carnet-de-verbes-v7";
 const CORE_ASSETS = [
   "./",
   "./index.html",
@@ -10,6 +10,9 @@ const CORE_ASSETS = [
   "./js/sync.js",
   "./js/practice.js",
   "./assets/icon.svg",
+  "./assets/icon-180.png",
+  "./assets/icon-192.png",
+  "./assets/icon-512.png",
   "./manifest.webmanifest"
 ];
 

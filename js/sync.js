@@ -21,7 +21,11 @@ export function loadLocalState() {
 }
 
 export function saveLocalState(verbs, tombstones = {}) {
-  localStorage.setItem(STATE_KEY, JSON.stringify({ verbs, tombstones, savedAt: Date.now() }));
+  try {
+    localStorage.setItem(STATE_KEY, JSON.stringify({ verbs, tombstones, savedAt: Date.now() }));
+  } catch (err) {
+    console.warn("Could not save to localStorage (private browsing mode or quota exceeded):", err);
+  }
 }
 
 export function loadSettings() {
@@ -41,7 +45,11 @@ export function loadSettings() {
 }
 
 export function saveSettings(settings) {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  } catch (err) {
+    console.warn("Could not save settings to localStorage:", err);
+  }
 }
 
 // Merge local and remote verb collections cleanly using updatedAt + deletion tombstones
@@ -88,13 +96,17 @@ async function ghFetch(path, token, options = {}) {
   return res.json();
 }
 
-// Automatically discover existing private sync Gist if gistId is blank!
+// Automatically discover existing private sync Gist if gistId is blank (paginates up to 500 gists)
 async function findExistingSyncGist(token) {
-  const gists = await ghFetch("/gists?per_page=60", token);
-  for (const g of gists) {
-    if (g.files && g.files[GIST_FILENAME]) {
-      return g.id;
+  for (let page = 1; page <= 5; page++) {
+    const gists = await ghFetch(`/gists?per_page=100&page=${page}`, token);
+    if (!Array.isArray(gists) || !gists.length) break;
+    for (const g of gists) {
+      if (g.files && g.files[GIST_FILENAME]) {
+        return g.id;
+      }
     }
+    if (gists.length < 100) break;
   }
   return null;
 }
