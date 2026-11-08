@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Carnet de Verbes — Personal French Verb Notebook</title>
-  <meta name="description" content="AI-powered personal French verb notebook for Duolingo learners. Capture conjugated verbs or screenshots on your phone, master grammar traps, practice, sync across devices, and export to Word (.docx)." />
+  <title>French Verb Notebook — Carnet de Verbes</title>
+  <meta name="description" content="Clean, clutter-free French verb notebook for Duolingo learners with instant conjugations, grammar notes, audio, practice drills, and Word export." />
   <meta name="theme-color" content="#059669" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -14,345 +14,295 @@
   <link rel="stylesheet" href="./css/styles.css" />
 </head>
 <body>
-  <div class="app-shell">
+  <div class="wrap">
 
-    <!-- ==================== HEADER ==================== -->
-    <header class="topbar">
-      <div class="brand">
-        <img src="./assets/icon.svg" alt="Carnet de Verbes icon" class="brand-mark" />
-        <div>
-          <div class="brand-title-row">
-            <h1>Carnet de Verbes</h1>
-            <span id="verb-count-badge" class="count-pill">0 verbs</span>
-          </div>
-          <p class="brand-subtitle">Capture French verbs from Duolingo, study smart grammar notes &amp; sync anywhere.</p>
-        </div>
+    <!-- Top Header -->
+    <header class="header">
+      <button id="header-back-btn" type="button" class="icon-circle-btn hidden" aria-label="Back to notebook" title="Back to notebook">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+        </svg>
+      </button>
+
+      <div class="header-titles">
+        <h1 id="header-title">French Verb Notebook</h1>
+        <p id="header-subtitle" class="subtitle">Hear a new verb? Just type it – the rest fills itself in.</p>
       </div>
 
-      <div class="topbar-actions">
-        <nav class="segmented-nav" aria-label="Main Navigation">
-          <button id="nav-notebook-btn" type="button" class="seg-btn active">Notebook</button>
-          <button id="nav-practice-btn" type="button" class="seg-btn">2-Min Practice</button>
-        </nav>
-
-        <button id="sync-now-btn" type="button" class="btn" title="Sync between phone and laptop">
-          <span id="sync-status-dot" class="status-dot"></span>
-          <span id="sync-btn-label">Cloud Sync</span>
-        </button>
-
-        <button id="open-word-modal-btn" type="button" class="btn" title="Import or Export Word (.docx) & Backup">
-          Word (.docx)
-        </button>
-
-        <button id="open-settings-btn" type="button" class="btn" title="Configure Gemini AI & GitHub Cloud Sync">
-          <span id="ai-status-dot" class="status-dot"></span>
-          AI &amp; Settings
-        </button>
-
-        <button id="theme-toggle-btn" type="button" class="btn icon-btn" aria-label="Toggle dark mode" title="Toggle light / dark theme">
-          <svg id="theme-icon-moon" width="17" height="17" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
-          </svg>
-          <svg id="theme-icon-sun" class="hidden" width="17" height="17" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="5" />
-            <path stroke-linecap="round" d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
-          </svg>
-        </button>
-      </div>
+      <button id="open-drawer-btn" type="button" class="icon-circle-btn" aria-label="Menu and settings" title="Menu &amp; Settings">
+        <span class="dots-icon">•••</span>
+      </button>
     </header>
 
-    <!-- ==================== TOAST NOTIFICATION ==================== -->
-    <div id="toast-banner" class="toast-banner hidden" role="status" aria-live="polite">
-      <div class="toast-left">
-        <span id="toast-text"></span>
-      </div>
-      <div class="toast-actions">
-        <button id="toast-undo-btn" type="button" class="btn btn-subtle hidden" style="padding: 4px 10px; font-size: 0.75rem;">Undo</button>
-        <button id="toast-close-btn" type="button" style="font-size: 0.78rem; color: var(--text-muted);">Dismiss</button>
-      </div>
-    </div>
-
-    <!-- ==================== NOTEBOOK VIEW ==================== -->
-    <main id="view-notebook" style="display: flex; flex-direction: column; gap: 18px;">
-
-      <!-- Quick Add Capture Bar -->
-      <section class="capture-card" aria-label="Add French Verb">
-        <form id="quick-add-form" class="capture-row">
-          <div class="capture-input-wrap">
-            <input
-              id="quick-add-input"
-              type="text"
-              class="capture-input"
-              autocomplete="off"
-              autocapitalize="none"
-              placeholder="Type any French verb or conjugated form you saw (e.g. 'buvons', 'il faudrait', 'dormir')..."
-              aria-label="French verb or conjugated phrase"
-            />
-          </div>
-          <div class="capture-buttons">
-            <button id="quick-add-submit-btn" type="submit" class="btn btn-primary">+ Add Verb</button>
-            <button id="open-screenshot-btn" type="button" class="btn btn-subtle" title="Scan a Duolingo screenshot">
-              📷 Screenshot
-            </button>
-          </div>
-        </form>
-
-        <div class="capture-meta-row">
-          <div class="chip-group">
-            <span>Quick try:</span>
-            <button type="button" class="try-chip" data-try="avons pris">"avons pris"</button>
-            <button type="button" class="try-chip" data-try="il faudrait">"il faudrait"</button>
-            <button type="button" class="try-chip" data-try="dormons">"dormons"</button>
-            <button type="button" class="try-chip" data-try="se souvenir">"se souvenir"</button>
-          </div>
-          <div id="ai-mode-indicator"></div>
+    <!-- Main Notebook View -->
+    <main id="view-notebook">
+      <!-- Add Box -->
+      <form id="quick-add-form" class="addbox">
+        <div class="input-wrap">
+          <input
+            id="quick-add-input"
+            type="text"
+            placeholder="Type a verb — e.g. prendre"
+            autocomplete="off"
+            autocapitalize="none"
+            aria-label="French verb"
+          />
+          <button id="open-screenshot-btn" type="button" class="camera-btn" title="Extract from Duolingo screenshot" aria-label="Add from screenshot">
+            📷
+          </button>
         </div>
-      </section>
+        <button id="quick-add-submit-btn" type="submit" class="add-btn">Add</button>
+      </form>
 
-      <!-- Empty Notebook Welcome Card -->
-      <section id="empty-notebook-state" class="empty-notebook">
-        <div class="empty-icon-circle">
-          <svg width="26" height="26" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-          </svg>
+      <!-- Status Toast / Message -->
+      <div id="status-msg" class="msg hidden" role="status" aria-live="polite">
+        <span id="status-msg-text"></span>
+        <button id="status-undo-btn" type="button" class="undo-btn hidden">Undo</button>
+      </div>
+
+      <!-- Toolbar: Search + Sort Switch + Export & Filters -->
+      <div class="toolbar">
+        <div class="search-box">
+          <input id="search-input" type="search" placeholder="Search verbs or meanings..." aria-label="Search verbs" />
         </div>
-        <h2>Your French verb notebook is ready</h2>
-        <p>
-          Type a verb (or even a conjugated word from Duolingo like <em>buvons</em>) above, import your existing Microsoft Word file, or load 3 starter verbs to explore.
-        </p>
+
+        <div class="sort-switch" role="group" aria-label="Sort order">
+          <button id="sort-az-btn" type="button" class="sort-btn">A–Z</button>
+          <button id="sort-recent-btn" type="button" class="sort-btn active">Recent</button>
+        </div>
+      </div>
+
+      <!-- Second Row of Filter & Export Pills -->
+      <div class="sub-toolbar">
+        <div class="filter-pills" id="filter-pills">
+          <button type="button" class="pill-btn active" data-filter="all">All</button>
+          <button type="button" class="pill-btn" data-filter="etre">aux. être</button>
+          <button type="button" class="pill-btn" data-filter="irregular">irregular</button>
+          <button type="button" class="pill-btn" data-filter="reflexive">reflexive</button>
+        </div>
+
+        <button id="toolbar-export-btn" type="button" class="pill-btn export-pill">
+          Export ▾
+        </button>
+      </div>
+
+      <!-- Quick Export Menu Popup -->
+      <div id="quick-export-menu" class="quick-export-menu hidden">
+        <button id="quick-export-docx-btn" type="button" class="menu-item-btn">📄 Download Word (.docx)</button>
+        <button id="quick-export-json-btn" type="button" class="menu-item-btn">📦 Download Backup (.json)</button>
+      </div>
+
+      <!-- Feed Counter -->
+      <div class="feed-info">
+        <span id="verb-count-label">0 verbs saved</span> · <span>tap a verb to see its conjugations</span>
+      </div>
+
+      <!-- Empty State -->
+      <div id="empty-state" class="empty-card">
+        <strong>Your notebook is empty.</strong><br />
+        Add your first verb above — try <em>prendre</em>, <em>aller</em>, or <em>se lever</em>.<br />
         <div class="empty-actions">
-          <button id="empty-import-docx-btn" type="button" class="btn btn-primary">Import Existing Word (.docx)</button>
-          <button id="empty-starter-btn" type="button" class="btn">Load 3 Starter Verbs</button>
-          <button id="empty-setup-ai-btn" type="button" class="btn btn-subtle">Set Up Free Gemini AI</button>
+          <button id="empty-starters-btn" type="button" class="pill-btn">Load 3 Starter Verbs</button>
+          <button id="empty-import-word-btn" type="button" class="pill-btn">Import Existing Word (.docx)</button>
         </div>
-      </section>
-
-      <!-- Two-Column Master / Detail Workspace -->
-      <div id="workspace-grid" class="workspace-grid hidden">
-        <aside class="sidebar-card" aria-label="Saved Verbs">
-          <div class="sidebar-controls">
-            <div class="search-wrap">
-              <svg class="search-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M16.65 11a5.65 5.65 0 11-11.3 0 5.65 5.65 0 0111.3 0z" />
-              </svg>
-              <input id="search-verbs-input" type="search" class="search-input" placeholder="Search verb, meaning, form..." aria-label="Search saved verbs" />
-            </div>
-            <select id="sort-verbs-select" class="select-control" aria-label="Sort verbs">
-              <option value="recent">Recent</option>
-              <option value="az">A – Z</option>
-            </select>
-          </div>
-
-          <div class="filter-row" id="filter-row">
-            <button type="button" class="filter-chip active" data-filter="all">All</button>
-            <button type="button" class="filter-chip" data-filter="etre">Uses être</button>
-            <button type="button" class="filter-chip" data-filter="irregular">Irregular</button>
-            <button type="button" class="filter-chip" data-filter="reflexive">Reflexive</button>
-          </div>
-
-          <div id="verb-list-container" class="verb-list"></div>
-        </aside>
-
-        <section id="verb-detail-panel" class="detail-card" aria-live="polite"></section>
       </div>
+
+      <!-- Accordion Verbs List Container -->
+      <div id="verb-list-container" class="verb-cards-list"></div>
+
+      <footer class="footer">
+        Saved in this browser • Works on phone &amp; laptop • Opens right next to Duolingo
+      </footer>
     </main>
 
-    <!-- ==================== 2-MINUTE PRACTICE VIEW ==================== -->
-    <section id="view-practice" class="practice-wrap hidden">
-      <div id="practice-empty-state" class="empty-notebook hidden">
-        <h2>Add a verb first to unlock Practice</h2>
-        <p>Your 2-Minute Practice drills are generated exclusively from the verbs saved in your personal collection.</p>
-        <button id="practice-go-notebook-btn" type="button" class="btn btn-primary">Go to Notebook</button>
+    <!-- 2-Minute Practice View -->
+    <section id="view-practice" class="practice-view hidden">
+      <div id="practice-empty-card" class="empty-card hidden">
+        <strong>Add a verb to your notebook first.</strong><br />
+        Practice questions and flashcards are generated exclusively from your saved verbs.<br /><br />
+        <button id="practice-go-notebook-btn" type="button" class="pill-btn">← Back to Notebook</button>
       </div>
 
-      <div id="practice-active-card" class="practice-card">
-        <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding-bottom: 14px; border-bottom: 1px solid var(--border);">
+      <div id="practice-card" class="card open practice-box">
+        <div class="practice-header">
           <div>
-            <h2 style="font-size: 1.08rem; font-weight: 700;">Practice Your Saved Verbs</h2>
-            <p style="font-size: 0.78rem; color: var(--text-muted);">Active recall on your personal Duolingo collection.</p>
+            <h2 class="practice-title">2-Min Practice</h2>
+            <p class="practice-sub">Active recall drills on your personal verbs.</p>
           </div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span id="quiz-score-badge" class="count-pill">Score: 0 / 0</span>
-            <button id="quiz-mode-toggle-btn" type="button" class="btn btn-subtle">Switch to Flashcards</button>
+          <div class="practice-controls">
+            <span id="quiz-score-badge" class="badge">Score: 0 / 0</span>
+            <button id="quiz-mode-toggle-btn" type="button" class="pill-btn">Switch to Flashcards</button>
           </div>
         </div>
 
-        <!-- Fill-in-the-blank -->
-        <div id="quiz-fill-container" style="display: flex; flex-direction: column; gap: 14px;">
-          <div style="display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--text-muted);">
-            <span id="quiz-tense-label" style="font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent);"></span>
-            <span id="quiz-verb-hint"></span>
+        <!-- Fill in blank -->
+        <div id="quiz-fill-container" class="practice-mode-wrap">
+          <div class="quiz-meta-row">
+            <span id="quiz-tense-label" class="quiz-tense-pill">PRÉSENT</span>
+            <span id="quiz-verb-hint" class="quiz-verb-hint"></span>
           </div>
 
-          <div class="practice-prompt-box">
-            <p id="quiz-prompt-sentence" class="practice-sentence"></p>
-            <p id="quiz-prompt-english" style="font-size: 0.82rem; color: var(--text-secondary); margin-top: 4px;"></p>
+          <div class="example">
+            <div id="quiz-prompt-sentence" class="quiz-sentence"></div>
+            <div id="quiz-prompt-english" class="quiz-en"></div>
           </div>
 
           <div class="accent-bar">
-            <span style="font-size: 0.75rem; color: var(--text-muted); margin-right: 4px;">Accents:</span>
+            <span class="accent-label">Accents:</span>
             <button type="button" class="accent-key" data-accent="é">é</button>
             <button type="button" class="accent-key" data-accent="è">è</button>
             <button type="button" class="accent-key" data-accent="ê">ê</button>
             <button type="button" class="accent-key" data-accent="à">à</button>
             <button type="button" class="accent-key" data-accent="û">û</button>
-            <button type="button" class="accent-key" data-accent="î">î</button>
             <button type="button" class="accent-key" data-accent="ç">ç</button>
             <button type="button" class="accent-key" data-accent="œ">œ</button>
           </div>
 
-          <div style="display: flex; gap: 8px;">
-            <input id="quiz-answer-input" type="text" class="capture-input" placeholder="Type the missing verb form..." autocomplete="off" autocapitalize="none" />
-            <button id="quiz-check-btn" type="button" class="btn btn-primary" style="padding: 0 20px;">Check</button>
+          <div class="quiz-input-row">
+            <input id="quiz-answer-input" type="text" placeholder="Type the conjugated verb..." autocomplete="off" autocapitalize="none" />
+            <button id="quiz-check-btn" type="button" class="add-btn">Check</button>
           </div>
 
-          <div id="quiz-feedback-box" class="insight-item hidden" style="display: flex; flex-direction: column; gap: 6px;">
-            <p id="quiz-feedback-title" style="font-weight: 700; font-size: 0.9rem;"></p>
-            <p id="quiz-feedback-detail" style="font-size: 0.8rem; color: var(--text-secondary);"></p>
-            <div>
-              <button id="quiz-next-btn" type="button" class="btn btn-primary" style="margin-top: 4px;">Next Question →</button>
-            </div>
+          <div id="quiz-feedback-box" class="quiz-feedback hidden">
+            <div id="quiz-feedback-title" class="feedback-title"></div>
+            <div id="quiz-feedback-detail" class="feedback-detail"></div>
+            <button id="quiz-next-btn" type="button" class="add-btn next-btn">Next Question →</button>
           </div>
         </div>
 
-        <!-- Flashcard Flip Mode -->
-        <div id="quiz-flashcard-container" class="hidden" style="display: flex; flex-direction: column; gap: 14px;">
-          <div id="flashcard-stage" class="flashcard-stage">
-            <span id="flashcard-side-label" class="section-heading">English Meaning</span>
-            <p id="flashcard-main-text" style="font-size: 1.45rem; font-weight: 800;"></p>
-            <p id="flashcard-sub-text" style="font-size: 0.82rem; color: var(--text-secondary); max-width: 480px;"></p>
+        <!-- Flashcards -->
+        <div id="quiz-flashcard-container" class="practice-mode-wrap hidden">
+          <div id="flashcard-stage" class="flashcard-box">
+            <span id="flashcard-side-label" class="lbl">English Meaning (tap to flip)</span>
+            <div id="flashcard-main-text" class="flashcard-main"></div>
+            <div id="flashcard-sub-text" class="flashcard-sub"></div>
           </div>
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <button id="flashcard-speak-btn" type="button" class="btn btn-subtle">🔊 Pronounce French</button>
-            <button id="flashcard-next-btn" type="button" class="btn btn-primary">Next Card →</button>
+          <div class="flashcard-foot">
+            <button id="flashcard-speak-btn" type="button" class="pill-btn">🔊 Hear French</button>
+            <button id="flashcard-next-btn" type="button" class="add-btn">Next Verb →</button>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Hidden File Inputs for Import -->
-    <input id="import-docx-input" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="hidden" />
-    <input id="import-json-input" type="file" accept=".json,application/json" class="hidden" />
-
-    <!-- ==================== SCREENSHOT MODAL ==================== -->
-    <div id="screenshot-modal" class="modal-backdrop hidden">
-      <div class="modal-panel">
-        <div class="modal-head">
-          <h2>Add from Duolingo Screenshot</h2>
-          <button id="close-screenshot-btn" type="button" class="btn btn-subtle" style="padding: 4px 10px;">Close</button>
-        </div>
-        <div class="modal-body">
-          <div id="screenshot-ai-warning" class="insight-item" style="border-color: var(--etre-border); background: var(--etre-bg);">
-            <div class="insight-title" style="color: var(--etre-fg);">Connect Free Gemini Key for Live Image Reading</div>
-            <div class="insight-body" style="color: var(--etre-fg);">
-              Reading real phone screenshots uses Google Gemini Vision (free tier).
-              <button id="screenshot-open-settings-btn" type="button" style="font-weight: 700; text-decoration: underline; color: inherit;">Paste your key in Settings →</button>
-            </div>
-          </div>
-
-          <div id="screenshot-dropzone" class="dropzone">
-            <p style="font-weight: 600; font-size: 0.88rem;">Drop Duolingo screenshot(s) here, or tap to choose photos</p>
-            <p style="font-size: 0.76rem; color: var(--text-muted); margin-top: 4px;">Supports 1 or multiple screenshots at once (PNG, JPG, WebP)</p>
-            <input id="screenshot-file-input" type="file" accept="image/*" multiple class="hidden" />
-          </div>
-
-          <div id="screenshot-thumbs" class="thumb-strip"></div>
-
-          <div class="field-group">
-            <span class="field-label">Or try a quick sample context right now:</span>
-            <button
-              type="button"
-              class="verb-list-item"
-              data-demo-shot="ouvrir"
-              data-fr="La boulangerie ouvre à sept heures du matin."
-              data-en="The bakery opens at seven in the morning."
-            >
-              <div>
-                <div style="font-weight: 600; font-size: 0.84rem;">« La boulangerie <u>ouvre</u> à sept heures du matin. »</div>
-                <div style="font-size: 0.75rem; color: var(--text-muted);">Adds <strong>ouvrir</strong> (3rd-group -ir with -er endings)</div>
-              </div>
-              <span style="font-size: 0.78rem; font-weight: 600; color: var(--accent);">Add →</span>
-            </button>
-          </div>
-        </div>
-        <div class="modal-foot">
-          <span style="font-size: 0.75rem; color: var(--text-muted);">Extracts verb + saves your Duolingo sentence</span>
-          <button id="scan-screenshots-btn" type="button" class="btn btn-primary" disabled>Extract Verbs with AI</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ==================== WORD (.DOCX) & BACKUP MODAL ==================== -->
-    <div id="word-modal" class="modal-backdrop hidden">
-      <div class="modal-panel modal-wide">
-        <div class="modal-head">
-          <h2>Microsoft Word (.docx) &amp; Backup</h2>
-          <button id="close-word-modal-btn" type="button" class="btn btn-subtle" style="padding: 4px 10px;">Close</button>
-        </div>
-        <div class="modal-body">
-          <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;">
-            <span class="field-help">Import verbs from your existing Microsoft Word <code>.docx</code> file, or download a formatted Word document anytime.</span>
-            <div style="display: flex; gap: 7px;">
-              <button id="trigger-docx-import-btn" type="button" class="btn btn-subtle">Import .docx</button>
-              <button id="trigger-json-import-btn" type="button" class="btn btn-subtle">Import .json</button>
-            </div>
-          </div>
-
-          <div id="word-preview-box" style="max-height: 340px; overflow-y: auto; padding: 12px 14px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-subtle);"></div>
-        </div>
-        <div class="modal-foot">
-          <button id="download-json-btn" type="button" class="btn btn-subtle">Export .json Backup</button>
-          <button id="download-docx-btn" type="button" class="btn btn-primary">Download Word (.docx)</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ==================== AI & CLOUD SYNC SETTINGS MODAL ==================== -->
-    <div id="settings-modal" class="modal-backdrop hidden">
-      <div class="modal-panel">
-        <div class="modal-head">
-          <h2>AI &amp; Phone ↔ Laptop Sync</h2>
-          <button id="close-settings-btn" type="button" class="btn btn-subtle" style="padding: 4px 10px;">Close</button>
-        </div>
-        <div class="modal-body">
-          <div class="field-group">
-            <label for="settings-gemini-key" class="field-label">1. Google Gemini API Key (Free Tier)</label>
-            <p class="field-help">
-              Unlocks all 12,000+ French verbs, conjugated sentences, and real Duolingo screenshot reading. Get a free key in 10 seconds at
-              <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a>. Stored only in your browser.
-            </p>
-            <div style="display: flex; gap: 8px;">
-              <input id="settings-gemini-key" type="password" class="field-input" placeholder="AIzaSy..." autocomplete="off" />
-              <button id="test-gemini-btn" type="button" class="btn btn-subtle">Test Key</button>
-            </div>
-          </div>
-
-          <hr style="border: 0; border-top: 1px solid var(--border); width: 100%;" />
-
-          <div class="field-group">
-            <label for="settings-github-token" class="field-label">2. GitHub Gist Token (Optional Phone ↔ Laptop Sync)</label>
-            <p class="field-help">
-              Create a Personal Access Token (Classic) with <strong>only the <code>gist</code> scope</strong> at
-              <a href="https://github.com/settings/tokens/new?scopes=gist&description=Carnet+de+Verbes+Sync" target="_blank" rel="noopener noreferrer">GitHub Token Settings</a>.
-              Paste the same token on your phone and laptop — your private sync Gist is created &amp; discovered automatically!
-            </p>
-            <input id="settings-github-token" type="password" class="field-input" placeholder="ghp_..." autocomplete="off" />
-          </div>
-
-          <div class="field-group">
-            <label for="settings-gist-id" class="field-label">Private Sync Gist ID (Auto-filled)</label>
-            <input id="settings-gist-id" type="text" class="field-input" placeholder="Leave blank — auto-detected from your token" autocomplete="off" />
-            <span id="settings-sync-meta" class="field-help"></span>
-          </div>
-        </div>
-        <div class="modal-foot">
-          <span style="font-size: 0.75rem; color: var(--text-muted);">Keys stay private in your browser's localStorage</span>
-          <button id="save-settings-btn" type="button" class="btn btn-primary">Save Settings</button>
-        </div>
-      </div>
-    </div>
-
   </div>
+
+  <!-- ==================== SIDEBAR DRAWER (Word, AI, Sync, Theme) ==================== -->
+  <div id="drawer-backdrop" class="drawer-backdrop hidden" aria-hidden="true"></div>
+  <aside id="settings-drawer" class="drawer" aria-label="Settings and tools" aria-hidden="true">
+    <div class="drawer-header">
+      <h2>Notebook Tools &amp; Sync</h2>
+      <button id="close-drawer-btn" type="button" class="icon-circle-btn small" aria-label="Close menu">✕</button>
+    </div>
+
+    <div class="drawer-body">
+      <!-- 2-Min Practice Mode Nav -->
+      <div class="drawer-section">
+        <div class="lbl">Practice &amp; Study</div>
+        <button id="drawer-practice-btn" type="button" class="drawer-action-btn primary-soft">
+          <span>🎯 Open 2-Min Practice Drills</span>
+          <span class="chev">›</span>
+        </button>
+      </div>
+
+      <!-- Word (.docx) & Backup -->
+      <div class="drawer-section">
+        <div class="lbl">Microsoft Word (.docx) &amp; Backup</div>
+        <div class="btn-group-vertical">
+          <button id="drawer-export-docx-btn" type="button" class="drawer-action-btn">
+            <span>📄 Download Word (.docx)</span>
+          </button>
+          <button id="drawer-import-docx-btn" type="button" class="drawer-action-btn">
+            <span>📥 Import Existing Word (.docx)</span>
+          </button>
+          <button id="drawer-export-json-btn" type="button" class="drawer-action-btn">
+            <span>📦 Download JSON Backup</span>
+          </button>
+          <button id="drawer-import-json-btn" type="button" class="drawer-action-btn">
+            <span>📤 Restore from JSON Backup</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Phone <-> Laptop Cloud Sync -->
+      <div class="drawer-section">
+        <div class="lbl">Phone ↔ Laptop Sync (GitHub Gist)</div>
+        <p class="drawer-help">Keep your notebook synced across your phone and laptop in a private GitHub Gist.</p>
+        <div class="input-with-btn">
+          <input id="drawer-github-token" type="password" placeholder="GitHub Personal Access Token (gist)" autocomplete="off" />
+          <button id="drawer-sync-btn" type="button" class="add-btn small">Sync</button>
+        </div>
+        <span id="drawer-sync-status" class="drawer-help-meta"></span>
+      </div>
+
+      <!-- Google Gemini API Key -->
+      <div class="drawer-section">
+        <div class="lbl">Gemini AI (All 12,000+ Verbs &amp; Vision)</div>
+        <p class="drawer-help">
+          Paste a free Gemini key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a> to unlock any French verb &amp; real Duolingo screenshot scanning.
+        </p>
+        <div class="input-with-btn">
+          <input id="drawer-gemini-key" type="password" placeholder="AIzaSy..." autocomplete="off" />
+          <button id="drawer-test-key-btn" type="button" class="add-btn small">Save</button>
+        </div>
+      </div>
+
+      <!-- Appearance -->
+      <div class="drawer-section">
+        <div class="lbl">Appearance</div>
+        <button id="drawer-theme-btn" type="button" class="drawer-action-btn">
+          <span id="drawer-theme-label">🌙 Switch to Dark Theme</span>
+        </button>
+      </div>
+
+      <!-- Dynamic Footer Note requested by user -->
+      <div class="drawer-footer-note">
+        <div id="drawer-offline-note" class="drawer-status-box">
+          <span class="status-indicator"></span>
+          <div>
+            <strong>75-verb offline starter active.</strong><br />
+            Connect a free Gemini key above for all 12,000+ French verbs and live Duolingo screenshot scanning.
+          </div>
+        </div>
+
+        <div id="drawer-online-note" class="drawer-status-box online hidden">
+          <span class="status-indicator green"></span>
+          <div>
+            <strong>● Gemini AI Active</strong><br />
+            All 12,000+ French verbs &amp; Duolingo screenshot scanning are ready on your phone and laptop.
+          </div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Screenshot OCR Modal -->
+  <div id="screenshot-modal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>Add from Duolingo Screenshot</h2>
+        <button id="close-screenshot-btn" type="button" class="icon-circle-btn small">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="screenshot-ai-needed-alert" class="alert-box hidden">
+          Connect your free Gemini key in the menu to let AI vision extract verbs from your phone screenshots.
+        </div>
+        <div id="screenshot-dropzone" class="dropzone">
+          <p><strong>Tap here to select Duolingo screenshot(s)</strong></p>
+          <p class="sub">PNG, JPG, or WebP from your phone or laptop</p>
+          <input id="screenshot-file-input" type="file" accept="image/*" multiple class="hidden" />
+        </div>
+        <div id="screenshot-thumbs" class="thumbs-row"></div>
+      </div>
+      <div class="modal-foot">
+        <button id="scan-screenshot-submit-btn" type="button" class="add-btn" disabled>Extract Verbs with AI</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden File Pickers -->
+  <input id="import-docx-file-input" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="hidden" />
+  <input id="import-json-file-input" type="file" accept=".json,application/json" class="hidden" />
 
   <script type="module" src="./js/app.js"></script>
 </body>

@@ -27,17 +27,17 @@ export function createPracticeController({ getVerbs, speakFrench, onSwitchToNote
 
   function render() {
     const verbs = getVerbs();
-    const emptyEl = $("practice-empty-state");
-    const activeEl = $("practice-active-card");
+    const emptyEl = $("practice-empty-card");
+    const activeEl = $("practice-card");
 
     if (!verbs.length) {
-      emptyEl.classList.remove("hidden");
-      activeEl.classList.add("hidden");
+      emptyEl?.classList.remove("hidden");
+      activeEl?.classList.add("hidden");
       return;
     }
 
-    emptyEl.classList.add("hidden");
-    activeEl.classList.remove("hidden");
+    emptyEl?.classList.add("hidden");
+    activeEl?.classList.remove("hidden");
 
     const v = verbs[index % verbs.length];
     $("quiz-score-badge").textContent = `Score: ${correct} / ${total}`;
