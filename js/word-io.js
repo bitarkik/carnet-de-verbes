@@ -213,11 +213,11 @@ export async function extractTextFromDocx(file) {
         throw new Error("Unsupported compression method in .docx file.");
       }
 
-      // Convert paragraph/row breaks to newlines and strip XML tags
+      // Convert paragraph/row/cell breaks so lists and Word tables extract cleanly
       return xmlText
         .replace(/<\/w:p>/g, "\n")
         .replace(/<\/w:tr>/g, "\n")
-        .replace(/<\/w:tc>/g, "  ")
+        .replace(/<\/w:tc>/g, " | ")
         .replace(/<[^>]+>/g, "")
         .replace(/&amp;/g, "&")
         .replace(/&lt;/g, "<")

@@ -2,16 +2,16 @@
 // Carnet de Verbes — Clean Accordion Notebook Controller (Muse-Inspired)
 // ==========================================================================
 
-import { lookupOfflineVerb, extractOfflineVerbsFromText } from "./french-engine.js?v=9";
+import { lookupOfflineVerb, extractOfflineVerbsFromText } from "./french-engine.js?v=10";
 import {
   testGeminiKey,
   lookupVerbWithAI,
   extractVerbsFromScreenshots,
   extractVerbsFromWordTextWithAI
-} from "./ai.js?v=9";
-import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=9";
-import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=9";
-import { createPracticeController } from "./practice.js?v=9";
+} from "./ai.js?v=10";
+import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=10";
+import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=10";
+import { createPracticeController } from "./practice.js?v=10";
 
 const TENSES = [
   { key: "present", label: "Présent" },
@@ -559,18 +559,54 @@ function handleDownloadJsonBackup() {
 
 async function handleImportDocx(file) {
   if (!file) return;
+  closeDrawer();
   showMsg(`Reading “${file.name}”...`);
   try {
     const text = await extractTextFromDocx(file);
-    let importedVerbs = extractOfflineVerbsFromText(text);
+    const verbMap = new Map();
 
+    // 1. Instant offline dictionary scan (handles tables, bullet lists, colons, reflexive verbs)
+    for (const v of extractOfflineVerbsFromText(text)) {
+      verbMap.set(v.infinitive.toLowerCase(), v);
+    }
+
+    // 2. If Gemini AI key is connected, also extract any additional verbs outside the 103-verb pack
     if (settings.geminiKey?.trim()) {
-      const aiVerbs = await extractVerbsFromWordTextWithAI(text, settings.geminiKey.trim());
-      if (aiVerbs.length > importedVerbs.length) {
-        importedVerbs = aiVerbs;
+      const apiKey = settings.geminiKey.trim();
+      try {
+        showMsg(`Scanning “${file.name}” for all French verbs...`);
+        const aiInfinitives = await extractVerbsFromWordTextWithAI(text, apiKey);
+        const needAiLookup = [];
+
+        for (const rawInf of aiInfinitives) {
+          const off = lookupOfflineVerb(rawInf);
+          if (off.ok && off.verb) {
+            verbMap.set(off.verb.infinitive.toLowerCase(), off.verb);
+          } else if (!verbMap.has(rawInf.toLowerCase())) {
+            needAiLookup.push(rawInf);
+          }
+        }
+
+        // Generate full conjugation tables via Gemini AI for any verbs not in the 103-verb offline pack
+        const capped = needAiLookup.slice(0, 15);
+        for (let i = 0; i < capped.length; i++) {
+          const targetInf = capped[i];
+          showMsg(`Generating conjugations for “${targetInf}” via Gemini AI (${i + 1}/${capped.length})...`);
+          try {
+            const aiRes = await lookupVerbWithAI(targetInf, apiKey);
+            if (aiRes.ok && aiRes.verb) {
+              verbMap.set(aiRes.verb.infinitive.toLowerCase(), aiRes.verb);
+            }
+          } catch (_) {
+            // Continue importing remaining verbs even if one fails
+          }
+        }
+      } catch (_) {
+        // Fall back to offline-extracted verbs if AI call fails
       }
     }
 
+    const importedVerbs = Array.from(verbMap.values());
     if (!importedVerbs.length) {
       showMsg("Couldn't find French verbs in that .docx file.", { isError: true });
       return;
@@ -581,8 +617,11 @@ async function handleImportDocx(file) {
       const { alreadyExisted } = upsertVerb(v, { select: true });
       if (!alreadyExisted) added += 1;
     }
-    closeDrawer();
-    showMsg(`Imported ${added} new verb${added === 1 ? "" : "s"} from “${file.name}”! 🎉`);
+    showMsg(
+      added > 0
+        ? `Imported ${added} new verb${added === 1 ? "" : "s"} (${importedVerbs.length} total found) from “${file.name}”! 🎉`
+        : `All ${importedVerbs.length} verb${importedVerbs.length === 1 ? "" : "s"} in “${file.name}” are already in your notebook ✓`
+    );
   } catch (err) {
     showMsg(`Import error: ${err.message}`, { isError: true });
   }
@@ -859,7 +898,7 @@ function init() {
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register("./sw.js?v=9")
+        .register("./sw.js?v=10")
         .then((reg) => {
           reg.update().catch(() => {});
           // Listen for updates and automatically refresh if new version found

@@ -748,19 +748,51 @@ export function lookupOfflineVerb(rawInput) {
 export function extractOfflineVerbsFromText(text) {
   const found = [];
   const seen = new Set();
-  const lines = text.split(/[\n\r,;•|—–-]+/);
-  for (const line of lines) {
-    const token = line.trim().toLowerCase().replace(/^\d+[.)]\s*/, "");
-    if (!token || token.length > 35) continue;
-    if (OFFLINE_DICTIONARY[token] && !seen.has(token)) {
-      seen.add(token);
-      found.push(structuredClone(OFFLINE_DICTIONARY[token]));
-    } else {
-      const firstWord = token.split(/\s+/)[0];
-      if (OFFLINE_DICTIONARY[firstWord] && !seen.has(firstWord)) {
-        seen.add(firstWord);
-        found.push(structuredClone(OFFLINE_DICTIONARY[firstWord]));
+
+  const addIfKnown = (inf) => {
+    if (OFFLINE_DICTIONARY[inf] && !seen.has(inf)) {
+      seen.add(inf);
+      found.push(structuredClone(OFFLINE_DICTIONARY[inf]));
+      return true;
+    }
+    return false;
+  };
+
+  const lines = String(text || "").split(/[\n\r]+/);
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    // Skip boilerplate metadata lines from exported Carnet de Verbes .docx files
+    if (/^(Total saved verbs:|Grammar Tips:|Examples:|My Note:|Présent\s*\||Futur Simple\s*\||.*\|\s*Auxiliary:\s*(avoir|être))/i.test(line)) {
+      continue;
+    }
+
+    const segments = line.split(/[,:;•|—–=()/\[\]\t]+/);
+    for (const seg of segments) {
+      const cleaned = seg
+        .trim()
+        .toLowerCase()
+        .replace(/’/g, "'")
+        .replace(/^\d+[.)]\s*/, "")
+        .replace(/^[-*•]+\s*/, "")
+        .replace(/[.,!?«»"“”]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (!cleaned || cleaned.length > 40) continue;
+
+      // 1. Direct segment match (e.g. "prendre" or "se lever" or "s'appeler")
+      if (addIfKnown(cleaned)) continue;
+
+      const words = cleaned.split(" ");
+      // 2. Reflexive 2-word prefix (e.g. "se lever to get up")
+      if (words.length >= 2) {
+        const firstTwo = `${words[0]} ${words[1]}`;
+        if (addIfKnown(firstTwo)) continue;
       }
+
+      // 3. First word match (e.g. "prendre to take" or "s'appeler")
+      if (addIfKnown(words[0])) continue;
     }
   }
   return found;

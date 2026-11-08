@@ -221,11 +221,14 @@ ${VERB_ENTRY_SCHEMA_PROMPT}`;
 }
 
 export async function extractVerbsFromWordTextWithAI(docText, apiKey) {
-  const snippet = docText.slice(0, 12000);
-  const prompt = `Below is text extracted from a student's Microsoft Word French verb list.
-Identify up to 25 distinct French verbs listed in this document and generate complete structured verb objects for each one.
-Return ONLY valid JSON: { "verbs": [ ...array of verb objects matching the "verb" schema below... ] }
-${VERB_ENTRY_SCHEMA_PROMPT}
+  const snippet = docText.slice(0, 15000);
+  const prompt = `Below is text extracted from a student's Microsoft Word French verb document.
+Extract every distinct French verb listed or studied in this document and return its lowercase French infinitive (include "se " or "s'" if it is listed as a reflexive verb, e.g. "se lever", "s'appeler").
+Skip English words and skip auxiliary-only occurrences inside full conjugation tables if the main verb heading is already included.
+Return ONLY valid JSON matching this exact structure:
+{
+  "infinitives": ["prendre", "aller", "se lever"]
+}
 
 Document text:
 """
@@ -233,5 +236,7 @@ ${snippet}
 """`;
 
   const result = await callGemini(apiKey, [{ parts: [{ text: prompt }] }]);
-  return Array.isArray(result?.verbs) ? result.verbs : [];
+  return Array.isArray(result?.infinitives)
+    ? result.infinitives.map((s) => String(s || "").toLowerCase().trim()).filter(Boolean)
+    : [];
 }
