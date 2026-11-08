@@ -125,7 +125,14 @@ function buildFromSpec(infinitive, spec) {
   }
 
   const present = presForms.map((f, i) => formatPronounVerb(i, f, isReflexive, isIrregular || irregPresMask[i]));
-  const imparfait = IMP_ENDINGS.map((end, i) => formatPronounVerb(i, impStem + end, isReflexive, false));
+  const imparfait = IMP_ENDINGS.map((end, i) => {
+    let s = impStem;
+    if (end.startsWith("i")) {
+      if (s.endsWith("ge")) s = s.slice(0, -1);
+      else if (s.endsWith("ç")) s = s.slice(0, -1) + "c";
+    }
+    return formatPronounVerb(i, s + end, isReflexive, false);
+  });
   const futur = FUT_ENDINGS.map((end, i) => formatPronounVerb(i, futStem + end, isReflexive, irregFut));
   const conditionnel = IMP_ENDINGS.map((end, i) => formatPronounVerb(i, futStem + end, isReflexive, irregFut));
 
@@ -514,6 +521,66 @@ const SPECS = {
     presMark: [true, true, true, false, false, true], impStem: "pay", futStem: "paier", futMark: true,
     tipPrep: "No 'pour' needed! 'Je paie le café' already means 'I pay FOR the coffee'.",
     ex: ["On peut payer par carte ici ?", "Can we pay by card here?"]
+  },
+  "nettoyer": {
+    m: "to clean", irreg: false, group: "Stem-changing -oyer (y → i)", pp: "nettoyé",
+    pres: ["nettoie", "nettoies", "nettoie", "nettoyons", "nettoyez", "nettoient"],
+    presMark: [true, true, true, false, false, true], impStem: "nettoy", futStem: "nettoier", futMark: true,
+    tipExtra: "Stem rule: 'y' changes to 'i' before a silent 'e' (je nettoie, ils nettoient, je nettoierai)!",
+    ex: ["Je nettoie la cuisine après le dîner.", "I clean the kitchen after dinner."],
+    ex2: ["Nous avons nettoyé tout l'appartement.", "We cleaned the whole apartment."]
+  },
+  "envoyer": {
+    m: "to send", irreg: true, group: "Irregular -oyer", pp: "envoyé",
+    pres: ["envoie", "envoies", "envoie", "envoyons", "envoyez", "envoient"],
+    presMark: [true, true, true, false, false, true], impStem: "envoy", futStem: "enverr", futMark: true,
+    tipPrep: "envoyer qqch À qqn (J'envoie un message à mon ami).",
+    tipExtra: "Watch out! Irregular Futur & Conditionnel stem: enverr- (j'enverrai, j'enverrais) — just like voir → verrai!",
+    ex: ["Je t'envoie l'adresse par message.", "I'm sending you the address by text."],
+    ex2: ["Elle m'a envoyé une carte postale.", "She sent me a postcard."]
+  },
+  "employer": {
+    m: "to use / to employ", irreg: false, group: "Stem-changing -oyer (y → i)", pp: "employé",
+    pres: ["emploie", "emploies", "emploie", "employons", "employez", "emploient"],
+    presMark: [true, true, true, false, false, true], impStem: "employ", futStem: "emploier", futMark: true,
+    ex: ["Quel mot est-ce que tu emploies ici ?", "Which word do you use here?"]
+  },
+  "ennuyer": {
+    m: "to bore / to annoy", irreg: false, group: "Stem-changing -uyer (y → i)", pp: "ennuyé",
+    pres: ["ennuie", "ennuies", "ennuie", "ennuyons", "ennuyez", "ennuient"],
+    presMark: [true, true, true, false, false, true], impStem: "ennuy", futStem: "ennuier", futMark: true,
+    tipExtra: "Reflexive 's'ennuyer' means 'to be bored' (Je m'ennuie = I'm bored).",
+    ex: ["Ce long discours m'ennuie un peu.", "This long speech bores me a little."]
+  },
+  "jeter": {
+    m: "to throw (away)", irreg: false, group: "Stem-changing -er (tt)", pp: "jeté",
+    pres: ["jette", "jettes", "jette", "jetons", "jetez", "jettent"],
+    presMark: [true, true, true, false, false, true], impStem: "jet", futStem: "jetter", futMark: true,
+    ex: ["Ne jette pas ce papier, s'il te plaît.", "Don't throw away that paper, please."]
+  },
+  "répéter": {
+    m: "to repeat / to rehearse", irreg: false, group: "Stem-changing -er (é → è)", pp: "répété",
+    pres: ["répète", "répètes", "répète", "répétons", "répétez", "répètent"],
+    presMark: [true, true, true, false, false, true], impStem: "répét", futStem: "répéter",
+    ex: ["Pouvez-vous répéter plus lentement ?", "Can you repeat more slowly?"]
+  },
+  "célébrer": {
+    m: "to celebrate", irreg: false, group: "Stem-changing -er (é → è)", pp: "célébré",
+    pres: ["célèbre", "célèbres", "célèbre", "célébrons", "célébrez", "célèbrent"],
+    presMark: [true, true, true, false, false, true], impStem: "célébr", futStem: "célébrer",
+    ex: ["Nous célébrons son anniversaire ce soir.", "We are celebrating his birthday tonight."]
+  },
+  "se promener": {
+    m: "to take a walk / stroll", irreg: false, aux: "être", group: "Reflexive stem-changing -er", pp: "promené",
+    pres: ["promène", "promènes", "promène", "promenons", "promenez", "promènent"],
+    presMark: [true, true, true, false, false, true], impStem: "promen", futStem: "promèner", futMark: true,
+    ex: ["Nous nous promenons dans le parc.", "We are taking a walk in the park."]
+  },
+  "se reposer": {
+    m: "to rest", ex: ["Je me repose un peu le dimanche.", "I rest a bit on Sundays."]
+  },
+  "se dépêcher": {
+    m: "to hurry up", tipPrep: "se dépêcher DE + verb (Dépêche-toi de finir !).", ex: ["Je me dépêche pour ne pas rater le train.", "I'm hurrying so I don't miss the train."]
   },
   "se coucher": {
     m: "to go to bed", ex: ["Je me couche vers minuit.", "I go to bed around midnight."]

@@ -1,14 +1,14 @@
-const CACHE_NAME = "carnet-de-verbes-v7";
+const CACHE_NAME = "carnet-de-verbes-v9";
 const CORE_ASSETS = [
   "./",
   "./index.html",
-  "./css/styles.css",
-  "./js/app.js",
-  "./js/french-engine.js",
-  "./js/ai.js",
-  "./js/word-io.js",
-  "./js/sync.js",
-  "./js/practice.js",
+  "./css/styles.css?v=9",
+  "./js/app.js?v=9",
+  "./js/french-engine.js?v=9",
+  "./js/ai.js?v=9",
+  "./js/word-io.js?v=9",
+  "./js/sync.js?v=9",
+  "./js/practice.js?v=9",
   "./assets/icon.svg",
   "./assets/icon-180.png",
   "./assets/icon-192.png",
@@ -18,7 +18,15 @@ const CORE_ASSETS = [
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(CORE_ASSETS))
+    caches.open(CACHE_NAME).then((cache) =>
+      Promise.all(
+        CORE_ASSETS.map((assetUrl) =>
+          fetch(assetUrl, { cache: "no-cache" }).then((res) => {
+            if (res.ok) return cache.put(assetUrl, res);
+          })
+        )
+      )
+    )
   );
   self.skipWaiting();
 });
@@ -38,7 +46,7 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
 
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request, { cache: "no-cache" })
       .then((res) => {
         const clone = res.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));

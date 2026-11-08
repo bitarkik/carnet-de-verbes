@@ -60,65 +60,95 @@ Important formatting rules:
 3. For impersonal verbs like falloir or pleuvoir, use "—" for unused persons and only fill index 2 ("il faut*").
 `;
 
+function extractJsonFromGeminiData(data) {
+  const parts = data?.candidates?.[0]?.content?.parts || [];
+  const nonThoughtText = parts
+    .filter((p) => !p.thought && typeof p.text === "string" && p.text.trim().length > 0)
+    .map((p) => p.text.trim())
+    .join("\n");
+  const fallbackText = parts
+    .filter((p) => typeof p.text === "string" && p.text.trim().length > 0)
+    .map((p) => p.text.trim())
+    .join("\n");
+
+  let rawText = (nonThoughtText || fallbackText).trim();
+  if (!rawText) return null;
+
+  // Clean possible ```json ``` markdown code blocks and isolate the JSON object
+  rawText = rawText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  const firstBrace = rawText.indexOf("{");
+  const lastBrace = rawText.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    rawText = rawText.slice(firstBrace, lastBrace + 1);
+  }
+  return JSON.parse(rawText);
+}
+
 async function callGemini(apiKey, contents) {
   let lastErr = null;
+  const cleanKey = String(apiKey || "").trim();
+
   for (const model of MODELS) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-    
-    // Set up generation config with low thinking level so model doesn't spend 20+ seconds overthinking a verb
-    const generationConfig = {
-      responseMimeType: "application/json",
-      thinkingConfig: {
-        thinkingLevel: "low"
-      }
-    };
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(cleanKey)}`;
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 12000); // 12-second timeout per model attempt
+    // Try JSON mode first; if a model returns an empty candidate in JSON mode, retry plain text mode
+    const configsToTry = [
+      { temperature: 0.1, responseMimeType: "application/json" },
+      { temperature: 0.1 }
+    ];
 
-    try {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey
-        },
-        signal: controller.signal,
-        body: JSON.stringify({
-          contents,
-          generationConfig
-        })
-      });
+    for (const generationConfig of configsToTry) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 25000);
 
-      clearTimeout(timer);
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            contents,
+            generationConfig
+          })
+        });
 
-      if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        const msg = errBody?.error?.message || `Gemini HTTP ${res.status}`;
-        lastErr = new Error(msg);
-        if (res.status === 400 || res.status === 401 || res.status === 403) {
-          throw lastErr;
+        clearTimeout(timer);
+
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => ({}));
+          const msg = errBody?.error?.message || `Gemini HTTP ${res.status}`;
+          lastErr = new Error(msg);
+          if (res.status === 401 || res.status === 403) {
+            throw lastErr;
+          }
+          break; // Move to next model in MODELS
         }
-        continue;
-      }
 
-      const data = await res.json();
-      const parts = data?.candidates?.[0]?.content?.parts || [];
-      // In Gemini 3, internal reasoning has thought: true, final answer has thought: false or undefined
-      const answerPart = parts.find((p) => !p.thought && p.text) || parts.find((p) => p.text);
-      let rawText = answerPart?.text?.trim();
-      if (!rawText) throw new Error("Empty response from Gemini.");
-      
-      // Clean possible ```json ``` markdown code blocks
-      rawText = rawText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
-      return JSON.parse(rawText);
-    } catch (fetchErr) {
-      clearTimeout(timer);
-      lastErr = fetchErr;
-      if (fetchErr.name === "AbortError") {
-        lastErr = new Error(`Model ${model} timed out. Trying faster fallback...`);
+        const data = await res.json();
+        const parsed = extractJsonFromGeminiData(data);
+        if (parsed) {
+          return parsed;
+        }
+
+        const reason =
+          data?.promptFeedback?.blockReason ||
+          data?.candidates?.[0]?.finishReason ||
+          "empty candidate";
+        lastErr = new Error(`Empty response from Gemini (${model}: ${reason}).`);
+        // Continue to fallback config (plain text mode) before moving to next model
+      } catch (fetchErr) {
+        clearTimeout(timer);
+        lastErr = fetchErr;
+        if (fetchErr.name === "AbortError") {
+          lastErr = new Error(`Model ${model} timed out. Trying fallback...`);
+          break;
+        }
+        if (String(fetchErr.message).includes("API key not valid") || String(fetchErr.message).includes("401") || String(fetchErr.message).includes("403")) {
+          throw fetchErr;
+        }
       }
-      continue;
     }
   }
   throw lastErr || new Error("Could not reach Gemini API.");

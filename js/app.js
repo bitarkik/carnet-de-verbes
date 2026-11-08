@@ -2,16 +2,16 @@
 // Carnet de Verbes — Clean Accordion Notebook Controller (Muse-Inspired)
 // ==========================================================================
 
-import { lookupOfflineVerb, extractOfflineVerbsFromText } from "./french-engine.js";
+import { lookupOfflineVerb, extractOfflineVerbsFromText } from "./french-engine.js?v=9";
 import {
   testGeminiKey,
   lookupVerbWithAI,
   extractVerbsFromScreenshots,
   extractVerbsFromWordTextWithAI
-} from "./ai.js";
-import { generateDocxBlob, extractTextFromDocx } from "./word-io.js";
-import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js";
-import { createPracticeController } from "./practice.js";
+} from "./ai.js?v=9";
+import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=9";
+import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=9";
+import { createPracticeController } from "./practice.js?v=9";
 
 const TENSES = [
   { key: "present", label: "Présent" },
@@ -234,8 +234,8 @@ async function handleAddVerb(rawText) {
         alreadyExisted
           ? `${verb.infinitive} is already in your notebook — opened here.`
           : aiRes.detectedFrom
-            ? `${verb.infinitive} added via AI (from “${aiRes.detectedFrom}”) ✓`
-            : `${verb.infinitive} added to your notebook ✓`
+            ? `${verb.infinitive} added via Gemini AI (from “${aiRes.detectedFrom}”) ✓`
+            : `${verb.infinitive} added via Gemini AI ✓`
       );
       return;
     }
@@ -859,8 +859,9 @@ function init() {
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register("./sw.js")
+        .register("./sw.js?v=9")
         .then((reg) => {
+          reg.update().catch(() => {});
           // Listen for updates and automatically refresh if new version found
           reg.addEventListener("updatefound", () => {
             const newWorker = reg.installing;
