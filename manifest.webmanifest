@@ -1,0 +1,17 @@
+{
+  "name": "Carnet de Verbes — French Verb Notebook",
+  "short_name": "Verbes FR",
+  "description": "Personal AI-powered French verb notebook for Duolingo learners with grammar notes, audio, practice drills, cloud sync, and Word export.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f6f8fa",
+  "theme_color": "#0e9474",
+  "icons": [
+    {
+      "src": "./assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
