@@ -2,12 +2,11 @@
 // Live Google Gemini AI Integration (Verb Lookup, Screenshot Vision, Word Import)
 // ==========================================================================
 
-// Models ordered for maximum response speed & availability
+// Modern Gemini 3.x Flash series models ONLY (all legacy 2.x models removed)
 const MODELS = [
-  "gemini-3.5-flash-lite", // ultra-fast (~1s) low-latency model
-  "gemini-3.8-flash",      // current standard flash model
-  "gemini-3.6-flash",
-  "gemini-2.5-flash"
+  "gemini-3.8-flash",      // Primary recommended model
+  "gemini-3.6-flash",      // Backup 1
+  "gemini-3.5-flash-lite"  // Backup 2
 ];
 
 const VERB_ENTRY_SCHEMA_PROMPT = `
