@@ -2,7 +2,13 @@
 // Live Google Gemini AI Integration (Verb Lookup, Screenshot Vision, Word Import)
 // ==========================================================================
 
-const MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"];
+// Priority fallback cascade for free-tier Gemini API keys
+const MODELS = [
+  "gemini-2.0-flash",
+  "gemini-1.5-flash",
+  "gemini-2.5-flash",
+  "gemini-2.0-flash-lite"
+];
 
 const VERB_ENTRY_SCHEMA_PROMPT = `
 Return ONLY valid JSON matching this exact structure:
