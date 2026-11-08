@@ -1,88 +1,94 @@
 /* ==========================================================================
-   Carnet de Verbes — Design System & Styles (Crisp Modern Minimal)
+   Carnet de Verbes — Design System & Styles (Warm Paper Notebook Theme)
    ========================================================================== */
 
 :root {
-  /* Surfaces */
-  --bg-canvas: hsl(210, 28%, 97.6%);
+  /* Fonts: Georgia serif for notebook warmth + clean sans for badges/tabs */
+  --font-serif: Georgia, "Times New Roman", serif;
+  --font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+
+  /* Muse's Warm Paper Surfaces */
+  --bg-canvas: #fdfaf3;
   --bg-card: #ffffff;
-  --bg-subtle: hsl(210, 24%, 95.2%);
-  --bg-hover: hsl(210, 22%, 92.8%);
+  --bg-subtle: #f7f2e4;
+  --bg-hover: #efe8d5;
+  --bg-example: #fdf6e3;
   --bg-input: #ffffff;
-  --bg-backdrop: rgba(15, 23, 42, 0.42);
+  --bg-backdrop: rgba(28, 36, 32, 0.44);
 
-  /* Typography */
-  --text-primary: hsl(220, 38%, 12%);
-  --text-secondary: hsl(215, 18%, 38%);
-  --text-muted: hsl(215, 14%, 52%);
+  /* Muse's Forest Ink Typography */
+  --text-primary: #1c2420;
+  --text-secondary: #4b5550;
+  --text-muted: #6b7280;
 
-  /* Brand Emerald / Teal Accent */
-  --accent: hsl(165, 82%, 31%);
-  --accent-hover: hsl(165, 84%, 26%);
+  /* Muse's Emerald Accent */
+  --accent: #059669;
+  --accent-hover: #047857;
   --accent-fg: #ffffff;
-  --accent-soft: hsl(163, 62%, 94%);
-  --accent-soft-fg: hsl(165, 84%, 24%);
-  --accent-border: hsl(163, 48%, 80%);
+  --accent-soft: #ecfdf5;
+  --accent-soft-fg: #047857;
+  --accent-border: #a7f3d0;
 
   /* Auxiliary "être" Warm Amber Highlight */
-  --etre-bg: hsl(32, 95%, 94%);
-  --etre-fg: hsl(24, 85%, 34%);
-  --etre-border: hsl(32, 82%, 82%);
+  --etre-bg: #fef3c7;
+  --etre-fg: #92400e;
+  --etre-border: #fde68a;
 
   /* Semantic Status */
-  --danger: hsl(0, 74%, 50%);
-  --danger-soft: hsl(0, 86%, 96%);
-  --danger-border: hsl(0, 72%, 86%);
+  --danger: #dc2626;
+  --danger-soft: #fef2f2;
+  --danger-border: #fecaca;
 
-  /* Borders & Elevation */
-  --border: hsl(214, 24%, 89%);
-  --border-strong: hsl(214, 20%, 80%);
-  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.035);
-  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.045), 0 6px 16px rgba(15, 23, 42, 0.03);
-  --shadow-lg: 0 18px 42px -10px rgba(15, 23, 42, 0.18), 0 4px 12px rgba(15, 23, 42, 0.06);
-  --focus-ring: 0 0 0 3px hsla(165, 82%, 31%, 0.2);
+  /* Muse's Warm Parchment Borders & Soft Elevation */
+  --border: #e5ddcb;
+  --border-strong: #d4c9b0;
+  --shadow-xs: 0 1px 2px rgba(28, 36, 32, 0.04);
+  --shadow-sm: 0 1px 3px rgba(28, 36, 32, 0.06), 0 4px 12px rgba(28, 36, 32, 0.03);
+  --shadow-lg: 0 18px 42px -10px rgba(28, 36, 32, 0.18), 0 4px 12px rgba(28, 36, 32, 0.06);
+  --focus-ring: 0 0 0 3px rgba(5, 150, 105, 0.2);
 
   /* Radii & Motion */
   --radius-sm: 8px;
-  --radius-md: 11px;
-  --radius-lg: 16px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
   --radius-pill: 999px;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 [data-theme="dark"] {
-  --bg-canvas: hsl(220, 32%, 8.5%);
-  --bg-card: hsl(220, 28%, 12%);
-  --bg-subtle: hsl(220, 24%, 16%);
-  --bg-hover: hsl(220, 22%, 20%);
-  --bg-input: hsl(220, 30%, 10%);
-  --bg-backdrop: rgba(2, 6, 23, 0.68);
+  --bg-canvas: #141a17;
+  --bg-card: #1c2420;
+  --bg-subtle: #242e29;
+  --bg-hover: #2d3a33;
+  --bg-example: #232b22;
+  --bg-input: #171f1b;
+  --bg-backdrop: rgba(8, 12, 10, 0.72);
 
-  --text-primary: hsl(210, 28%, 95%);
-  --text-secondary: hsl(215, 16%, 72%);
-  --text-muted: hsl(215, 14%, 54%);
+  --text-primary: #f5f2eb;
+  --text-secondary: #c4bfb2;
+  --text-muted: #8f8a7c;
 
-  --accent: hsl(164, 72%, 44%);
-  --accent-hover: hsl(164, 72%, 50%);
-  --accent-fg: hsl(220, 38%, 9%);
-  --accent-soft: hsla(164, 72%, 44%, 0.14);
-  --accent-soft-fg: hsl(164, 76%, 64%);
-  --accent-border: hsla(164, 65%, 48%, 0.32);
+  --accent: #10b981;
+  --accent-hover: #34d399;
+  --accent-fg: #0b1712;
+  --accent-soft: rgba(16, 185, 129, 0.15);
+  --accent-soft-fg: #6ee7b7;
+  --accent-border: rgba(16, 185, 129, 0.35);
 
-  --etre-bg: hsla(32, 90%, 55%, 0.14);
-  --etre-fg: hsl(34, 92%, 68%);
-  --etre-border: hsla(32, 85%, 55%, 0.3);
+  --etre-bg: rgba(245, 158, 11, 0.15);
+  --etre-fg: #fcd34d;
+  --etre-border: rgba(245, 158, 11, 0.35);
 
-  --danger: hsl(0, 82%, 65%);
-  --danger-soft: hsla(0, 75%, 55%, 0.14);
-  --danger-border: hsla(0, 75%, 55%, 0.3);
+  --danger: #f87171;
+  --danger-soft: rgba(239, 68, 68, 0.15);
+  --danger-border: rgba(239, 68, 68, 0.35);
 
-  --border: hsl(218, 22%, 20%);
-  --border-strong: hsl(218, 20%, 28%);
+  --border: #2e3a34;
+  --border-strong: #3e4d45;
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.25);
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.28);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
   --shadow-lg: 0 20px 48px rgba(0, 0, 0, 0.52);
-  --focus-ring: 0 0 0 3px hsla(164, 72%, 44%, 0.26);
+  --focus-ring: 0 0 0 3px rgba(16, 185, 129, 0.26);
 }
 
 /* ---------- Reset & Base ---------- */
@@ -97,7 +103,7 @@ html {
 
 body {
   margin: 0;
-  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-serif);
   background-color: var(--bg-canvas);
   color: var(--text-primary);
   line-height: 1.5;
@@ -643,7 +649,8 @@ button:disabled {
 }
 
 .verb-item-meaning {
-  font-size: 0.78rem;
+  font-size: 0.82rem;
+  font-style: italic;
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
@@ -652,14 +659,15 @@ button:disabled {
 }
 
 .aux-tag {
+  font-family: var(--font-sans);
   flex-shrink: 0;
   padding: 2px 8px;
   font-size: 0.75rem;
   font-weight: 600;
   border-radius: var(--radius-pill);
-  background: var(--bg-subtle);
-  color: var(--text-secondary);
-  border: 1px solid var(--border);
+  background: var(--accent-soft);
+  color: var(--accent-soft-fg);
+  border: 1px solid var(--accent-border);
 }
 
 .aux-tag.is-etre {
@@ -669,6 +677,7 @@ button:disabled {
 }
 
 .mini-tag {
+  font-family: var(--font-sans);
   font-size: 0.75rem;
   font-weight: 500;
   padding: 1px 6px;
@@ -720,8 +729,8 @@ button:disabled {
 }
 
 .detail-meaning {
-  font-size: 0.98rem;
-  font-weight: 500;
+  font-size: 1.02rem;
+  font-style: italic;
   color: var(--text-secondary);
   margin-top: 4px;
 }
@@ -734,13 +743,14 @@ button:disabled {
 }
 
 .meta-pill {
+  font-family: var(--font-sans);
   padding: 4px 10px;
   font-size: 0.75rem;
   font-weight: 600;
   border-radius: var(--radius-pill);
-  background: var(--bg-subtle);
-  color: var(--text-secondary);
-  border: 1px solid var(--border);
+  background: var(--accent-soft);
+  color: var(--accent-soft-fg);
+  border: 1px solid var(--accent-border);
 }
 
 .meta-pill.is-etre {
@@ -756,12 +766,13 @@ button:disabled {
   justify-content: space-between;
   gap: 12px;
   padding: 12px 15px;
-  border-radius: var(--radius-md);
-  background: var(--bg-subtle);
-  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  background: var(--bg-example);
+  border-left: 4px solid var(--accent);
 }
 
 .context-label {
+  font-family: var(--font-sans);
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -770,13 +781,14 @@ button:disabled {
 }
 
 .context-fr {
-  font-size: 0.92rem;
+  font-size: 0.96rem;
   font-weight: 600;
   margin-top: 2px;
 }
 
 .context-en {
-  font-size: 0.8rem;
+  font-size: 0.84rem;
+  font-style: italic;
   color: var(--text-secondary);
   margin-top: 1px;
 }
@@ -789,6 +801,7 @@ button:disabled {
 }
 
 .section-heading {
+  font-family: var(--font-sans);
   font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -816,6 +829,7 @@ button:disabled {
 }
 
 .insight-title {
+  font-family: var(--font-sans);
   font-size: 0.78rem;
   font-weight: 700;
   color: var(--text-primary);
@@ -823,7 +837,7 @@ button:disabled {
 }
 
 .insight-body {
-  font-size: 0.8rem;
+  font-size: 0.84rem;
   color: var(--text-secondary);
   line-height: 1.45;
 }
@@ -844,11 +858,12 @@ button:disabled {
 }
 
 .tense-tab {
+  font-family: var(--font-sans);
   padding: 6px 12px;
   font-size: 0.8rem;
   font-weight: 600;
   border-radius: var(--radius-pill);
-  border: 1px solid var(--border);
+  border: 1.5px solid var(--border);
   background: var(--bg-card);
   color: var(--text-secondary);
   transition: all 0.14s ease;
@@ -860,12 +875,13 @@ button:disabled {
 }
 
 .tense-tab.active {
-  background: var(--accent);
-  color: var(--accent-fg);
-  border-color: var(--accent);
+  background: var(--text-primary);
+  color: var(--bg-card);
+  border-color: var(--text-primary);
 }
 
 .tense-hint {
+  font-family: var(--font-sans);
   font-size: 0.75rem;
   color: var(--text-muted);
 }
@@ -892,7 +908,7 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   transition: background-color 0.14s ease, border-color 0.14s ease;
 }
 
@@ -937,9 +953,10 @@ button:disabled {
 
 .example-box {
   padding: 10px 12px;
-  border-radius: var(--radius-md);
-  background: var(--bg-subtle);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  background: var(--bg-example);
   border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
   margin-top: 7px;
 }
 
@@ -948,12 +965,13 @@ button:disabled {
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   font-weight: 600;
 }
 
 .example-en {
-  font-size: 0.78rem;
+  font-size: 0.82rem;
+  font-style: italic;
   color: var(--text-secondary);
   margin-top: 2px;
 }

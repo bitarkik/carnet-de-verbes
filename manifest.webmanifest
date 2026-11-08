@@ -4,8 +4,8 @@
   "description": "Personal AI-powered French verb notebook for Duolingo learners with grammar notes, audio, practice drills, cloud sync, and Word export.",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#f6f8fa",
-  "theme_color": "#0e9474",
+  "background_color": "#fdfaf3",
+  "theme_color": "#059669",
   "icons": [
     {
       "src": "./assets/icon.svg",
