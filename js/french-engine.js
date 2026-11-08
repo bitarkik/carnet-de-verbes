@@ -458,9 +458,41 @@ const SPECS = {
     ex: ["Il pleut beaucoup cet automne.", "It is raining a lot this autumn."],
     ex2: ["Il a plu toute la nuit.", "It rained all night."]
   },
+  "neiger": {
+    m: "to snow ('il neige')", impersonal: true, pp: "neigé",
+    pres: ["", "", "neige", "", "", ""], impStem: "neige", futStem: "neiger",
+    ex: ["Il neige souvent en janvier dans les Alpes.", "It often snows in January in the Alps."],
+    ex2: ["Il a neigé toute la matinée.", "It snowed all morning."]
+  },
+  "asseoir": {
+    m: "to sit / seat", irreg: true, group: "Irregular -oir", pp: "assis",
+    pres: ["assieds", "assieds", "assied", "asseyons", "asseyez", "asseyent"], impStem: "assey", futStem: "assiér", futMark: true,
+    tipExtra: "Usually used reflexively in everyday French: s'asseoir (Je m'assieds / Asseyez-vous).",
+    ex: ["Asseyez-vous, je vous en prie.", "Have a seat, please."]
+  },
+  "conduire": {
+    m: "to drive", irreg: true, group: "Irregular -uire (3rd group)", pp: "conduit",
+    pres: ["conduis", "conduis", "conduit", "conduisons", "conduisez", "conduisent"], impStem: "conduis", futStem: "conduir",
+    tipExtra: "All -uire verbs (conduire, traduire, construire, produire) follow this exact pattern!",
+    ex: ["Elle conduit prudemment sous la pluie.", "She drives carefully in the rain."],
+    ex2: ["J'ai conduit pendant trois heures.", "I drove for three hours."]
+  },
+  "peindre": {
+    m: "to paint", irreg: true, group: "Irregular -eindre (3rd group)", pp: "peint",
+    pres: ["peins", "peins", "peint", "peignons", "peignez", "peignent"], impStem: "peign", futStem: "peindr",
+    tipExtra: "Like éteindre and craindre: singular drops 'd' (-s, -s, -t) and plural uses -gn- (nous peignons)!",
+    ex: ["Il peint un paysage à l'aquarelle.", "He is painting a watercolor landscape."],
+    ex2: ["Elle a peint les murs en blanc.", "She painted the walls white."]
+  },
+  "souvenir": {
+    m: "to remember (se souvenir de)", irreg: true, aux: "être", group: "Reflexive Irregular -ir", pp: "souvenu",
+    pres: ["me souviens", "te souviens", "se souvient", "nous souvenons", "vous souvenez", "se souviennent"], impStem: "souven", futStem: "souviendr", futMark: true,
+    tipPrep: "Always pronominal with DE: se souvenir de qqch (Je me souviens de ce voyage)!",
+    ex: ["Je me souviens très bien de cette soirée.", "I remember that evening very well."]
+  },
   // Stem-changing -er & Reflexive Duolingo Favorites
   "lever": {
-    m: "to lift / to raise", irreg: false, group: "Stem-changing -er", pp: "levé",
+    m: "to lift / to raise / get up", irreg: false, group: "Stem-changing -er", pp: "levé",
     pres: ["lève", "lèves", "lève", "levons", "levez", "lèvent"],
     presMark: [true, true, true, false, false, true], impStem: "lev", futStem: "lèver", futMark: true,
     ex: ["Lève la main si tu as une question.", "Raise your hand if you have a question."]
@@ -470,6 +502,13 @@ const SPECS = {
     pres: ["lève", "lèves", "lève", "levons", "levez", "lèvent"],
     presMark: [true, true, true, false, false, true], impStem: "lev", futStem: "lèver", futMark: true,
     ex: ["Je me lève à sept heures tous les jours.", "I get up at seven o'clock every day."]
+  },
+  "promener": {
+    m: "to walk (a dog) / take for a walk", irreg: false, group: "Stem-changing -er (e → è)", pp: "promené",
+    pres: ["promène", "promènes", "promène", "promenons", "promenez", "promènent"],
+    presMark: [true, true, true, false, false, true], impStem: "promen", futStem: "promèner", futMark: true,
+    tipExtra: "With 'se' (se promener), it means 'to go for a walk/stroll'!",
+    ex: ["Je promène le chien tous les matins.", "I walk the dog every morning."]
   },
   "acheter": {
     m: "to buy", irreg: false, group: "Stem-changing -er", pp: "acheté",
@@ -585,17 +624,64 @@ const SPECS = {
   "se coucher": {
     m: "to go to bed", ex: ["Je me couche vers minuit.", "I go to bed around midnight."]
   },
+  "coucher": {
+    m: "to go to bed / put to bed", tipExtra: "Usually reflexive 'se coucher' when meaning 'to go to bed' (Je me couche tôt).", ex: ["Nous couchons les enfants à vingt heures.", "We put the children to bed at 8 PM."]
+  },
   "s'habiller": {
     m: "to get dressed", ex: ["Les enfants s'habillent vite.", "The kids get dressed quickly."]
   },
   "se réveiller": {
     m: "to wake up", ex: ["Elle se réveille sans réveil.", "She wakes up without an alarm."]
   },
+  "réveiller": {
+    m: "to wake (someone) up", tipExtra: "With 'se' (se réveiller), it means to wake up on your own!", ex: ["Le bruit a réveillé tout le monde.", "The noise woke everyone up."]
+  },
+  "se brosser": {
+    m: "to brush (one's teeth / hair)", ex: ["Je me brosse les dents matin et soir.", "I brush my teeth morning and night."]
+  },
+  "brosser": {
+    m: "to brush (one's teeth / hair)", tipExtra: "With body parts in French, use reflexive se brosser + definite article (Je me brosse les dents)!", ex: ["Elle se brosse les cheveux devant le miroir.", "She brushes her hair in front of the mirror."]
+  },
+  "se laver": {
+    m: "to wash up / wash oneself", ex: ["Il se lave les mains avant le repas.", "He washes his hands before the meal."]
+  },
+  "laver": {
+    m: "to wash", ex: ["Nous lavons la voiture le samedi.", "We wash the car on Saturdays."]
+  },
+  "se préparer": {
+    m: "to get ready / prepare oneself", ex: ["Je me prépare pour la fête.", "I'm getting ready for the party."]
+  },
+  "préparer": {
+    m: "to prepare", ex: ["Il prépare le dîner pour toute la famille.", "He is preparing dinner for the whole family."]
+  },
   // High-Frequency Regular -er, -ir, -re Verbs
   "parler": { m: "to speak / talk", tipPrep: "parler à qqn (to someone) · parler de qqch (about something).", ex: ["Vous parlez très bien français !", "You speak French very well!"] },
   "manger": { m: "to eat", tipExtra: "Spelling rule: keeps 'e' in nous mangeons so the 'g' stays soft!", ex: ["Nous mangeons ensemble à midi.", "We eat together at noon."] },
+  "nager": { m: "to swim", tipExtra: "Spelling rule: keeps 'e' in nous nageons and je nageais so the 'g' stays soft!", ex: ["Nous nageons dans la mer chaque été.", "We swim in the sea every summer."] },
+  "changer": { m: "to change", tipPrep: "changer DE + noun (sans article) = to change/switch (changer de train)!", tipExtra: "Keeps 'e' in nous changeons so the 'g' stays soft.", ex: ["Nous changeons de train à Lyon.", "We change trains in Lyon."] },
   "commencer": { m: "to start / begin", tipPrep: "commencer à + verb (Il commence à neiger).", tipExtra: "Spelling rule: 'c' becomes 'ç' in nous commençons!", ex: ["Le film commence à vingt heures.", "The movie starts at 8 PM."] },
   "voyager": { m: "to travel", tipExtra: "Keeps 'e' in nous voyageons so the 'g' stays soft.", ex: ["Nous voyageons souvent en train.", "We often travel by train."] },
+  "dessiner": { m: "to draw", ex: ["Les enfants dessinent des animaux.", "The children are drawing animals."] },
+  "attraper": { m: "to catch", ex: ["Dépêche-toi pour attraper le bus !", "Hurry up to catch the bus!"] },
+  "arrêter": { m: "to stop / arrest", tipPrep: "arrêter DE + verb (Il a arrêté de fumer).", ex: ["La pluie s'est enfin arrêtée.", "The rain finally stopped."] },
+  "rencontrer": { m: "to meet (by chance / for the first time)", tipExtra: "Use rencontrer for meeting someone new; use retrouver for meeting up as planned!", ex: ["J'ai rencontré un vieil ami au café.", "I ran into an old friend at the café."] },
+  "coûter": { m: "to cost", ex: ["Combien coûte ce billet de train ?", "How much does this train ticket cost?"] },
+  "inviter": { m: "to invite", tipPrep: "inviter qqn À + infinitive/noun (Je t'invite à dîner).", ex: ["Nous invitons nos voisins ce soir.", "We are inviting our neighbors tonight."] },
+  "apporter": { m: "to bring (an object)", tipExtra: "apporter = bring a thing you carry · amener = bring a person/pet!", ex: ["J'apporte un dessert pour la soirée.", "I'm bringing a dessert for the party."] },
+  "chanter": { m: "to sing", ex: ["Elle chante une chanson française.", "She is singing a French song."] },
+  "danser": { m: "to dance", ex: ["Nous dansons toute la nuit.", "We dance all night."] },
+  "passer": { m: "to spend (time) / to pass", aux: "être", tipAux: "Uses être for movement (je suis passé chez toi) and avoir for spending time or taking an exam (j'ai passé un bon week-end / j'ai passé un examen)!", ex: ["Nous passons nos vacances en Bretagne.", "We spend our vacation in Brittany."] },
+  "réserver": { m: "to reserve / to book", ex: ["J'ai réservé une table pour deux personnes.", "I booked a table for two people."] },
+  "voler": { m: "to fly / to steal", ex: ["L'avion vole au-dessus des nuages.", "The plane flies above the clouds."] },
+  "pêcher": { m: "to fish", tipExtra: "Don't confuse pêcher (to fish, circumflex ê) with pécher (to sin) or la pêche (peach/fishing)!", ex: ["Mon grand-père aime pêcher au bord du lac.", "My grandfather likes to fish by the lake."] },
+  "visiter": { m: "to visit (a place)", tipExtra: "Watch out! visiter is ONLY for places/museums/cities — for people, say 'rendre visite à'!", ex: ["Nous visitons le musée du Louvre.", "We are visiting the Louvre museum."] },
+  "tourner": { m: "to turn", ex: ["Tournez à gauche après le pont.", "Turn left after the bridge."] },
+  "ressembler": { m: "to resemble / to look like", tipPrep: "Always takes À: ressembler à qqn (Il ressemble à son père)!", ex: ["Tu ressembles beaucoup à ta mère.", "You look a lot like your mother."] },
+  "utiliser": { m: "to use", ex: ["J'utilise cette application tous les jours.", "I use this app every day."] },
+  "porter": { m: "to wear / to carry", ex: ["Elle porte un manteau vert aujourd'hui.", "She is wearing a green coat today."] },
+  "vérifier": { m: "to check / to verify", ex: ["Je vérifie les horaires du train.", "I'm checking the train schedule."] },
+  "montrer": { m: "to show", tipPrep: "montrer qqch À qqn (Montre-moi ta photo).", ex: ["Il nous montre le chemin sur la carte.", "He shows us the way on the map."] },
+  "fumer": { m: "to smoke", ex: ["Il est interdit de fumer ici.", "Smoking is prohibited here."] },
   "aimer": { m: "to like / to love", tipExtra: "Alone with a person = love (Je t'aime); with bien = like (J'aime bien Paul)!", ex: ["J'aime écouter de la musique française.", "I like listening to French music."] },
   "adorer": { m: "to love / adore", ex: ["Elle adore le chocolat noir.", "She loves dark chocolate."] },
   "détester": { m: "to hate", ex: ["Il déteste être en retard.", "He hates being late."] },
@@ -765,6 +851,23 @@ export function extractOfflineVerbsFromText(text) {
     // Skip boilerplate metadata lines from exported Carnet de Verbes .docx files
     if (/^(Total saved verbs:|Grammar Tips:|Examples:|My Note:|Présent\s*\||Futur Simple\s*\||.*\|\s*Auxiliary:\s*(avoir|être))/i.test(line)) {
       continue;
+    }
+
+    // If line has explicit "FrenchVerb (to English meaning)" format, also support regular -er/-ir/-re verbs
+    const explicitMatch = line.match(/^(?:\d+[.)]\s*)?([A-Za-zÀ-ÿ'’ -]{3,28}?)\s*\((to\s+[^)]+)\)/i);
+    if (explicitMatch) {
+      const candidateInf = explicitMatch[1].trim().toLowerCase().replace(/’/g, "'");
+      const candidateMeaning = explicitMatch[2].trim();
+      if (!addIfKnown(candidateInf) && !seen.has(candidateInf) && /(er|ir|re)$/.test(candidateInf)) {
+        seen.add(candidateInf);
+        found.push(
+          buildFromSpec(candidateInf, {
+            m: candidateMeaning,
+            ex: [`Je pratique le verbe « ${candidateInf} ».`, `Meaning: ${candidateMeaning}.`]
+          })
+        );
+        continue;
+      }
     }
 
     const segments = line.split(/[,:;•|—–=()/\[\]\t]+/);

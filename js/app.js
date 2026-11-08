@@ -2,16 +2,16 @@
 // Carnet de Verbes — Clean Accordion Notebook Controller (Muse-Inspired)
 // ==========================================================================
 
-import { lookupOfflineVerb, extractOfflineVerbsFromText } from "./french-engine.js?v=10";
+import { lookupOfflineVerb, extractOfflineVerbsFromText } from "./french-engine.js?v=11";
 import {
   testGeminiKey,
   lookupVerbWithAI,
   extractVerbsFromScreenshots,
   extractVerbsFromWordTextWithAI
-} from "./ai.js?v=10";
-import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=10";
-import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=10";
-import { createPracticeController } from "./practice.js?v=10";
+} from "./ai.js?v=11";
+import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=11";
+import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=11";
+import { createPracticeController } from "./practice.js?v=11";
 
 const TENSES = [
   { key: "present", label: "Présent" },
@@ -564,34 +564,36 @@ async function handleImportDocx(file) {
   try {
     const text = await extractTextFromDocx(file);
     const verbMap = new Map();
+    const existingSet = new Set(verbs.map((v) => v.infinitive.toLowerCase()));
 
-    // 1. Instant offline dictionary scan (handles tables, bullet lists, colons, reflexive verbs)
+    // 1. Instant offline dictionary & structured heading scan
     for (const v of extractOfflineVerbsFromText(text)) {
       verbMap.set(v.infinitive.toLowerCase(), v);
     }
 
-    // 2. If Gemini AI key is connected, also extract any additional verbs outside the 103-verb pack
+    // 2. If Gemini AI key is connected, also extract any additional verbs outside the offline pack
     if (settings.geminiKey?.trim()) {
       const apiKey = settings.geminiKey.trim();
       try {
-        showMsg(`Scanning “${file.name}” for all French verbs...`);
         const aiInfinitives = await extractVerbsFromWordTextWithAI(text, apiKey);
         const needAiLookup = [];
 
         for (const rawInf of aiInfinitives) {
+          const lowerInf = rawInf.toLowerCase();
+          if (verbMap.has(lowerInf) || existingSet.has(lowerInf)) continue;
+
           const off = lookupOfflineVerb(rawInf);
           if (off.ok && off.verb) {
             verbMap.set(off.verb.infinitive.toLowerCase(), off.verb);
-          } else if (!verbMap.has(rawInf.toLowerCase())) {
+          } else {
             needAiLookup.push(rawInf);
           }
         }
 
-        // Generate full conjugation tables via Gemini AI for any verbs not in the 103-verb offline pack
-        const capped = needAiLookup.slice(0, 15);
-        for (let i = 0; i < capped.length; i++) {
-          const targetInf = capped[i];
-          showMsg(`Generating conjugations for “${targetInf}” via Gemini AI (${i + 1}/${capped.length})...`);
+        // Generate full conjugation tables via Gemini AI for any verbs not in the offline pack
+        for (let i = 0; i < needAiLookup.length; i++) {
+          const targetInf = needAiLookup[i];
+          showMsg(`Generating conjugations for “${targetInf}” via Gemini AI (${i + 1}/${needAiLookup.length})...`);
           try {
             const aiRes = await lookupVerbWithAI(targetInf, apiKey);
             if (aiRes.ok && aiRes.verb) {
@@ -599,6 +601,10 @@ async function handleImportDocx(file) {
             }
           } catch (_) {
             // Continue importing remaining verbs even if one fails
+          }
+          // Brief pause when importing many AI verbs so free-tier RPM limits aren't triggered
+          if (needAiLookup.length > 4 && i < needAiLookup.length - 1) {
+            await new Promise((r) => setTimeout(r, 1200));
           }
         }
       } catch (_) {
@@ -619,7 +625,7 @@ async function handleImportDocx(file) {
     }
     showMsg(
       added > 0
-        ? `Imported ${added} new verb${added === 1 ? "" : "s"} (${importedVerbs.length} total found) from “${file.name}”! 🎉`
+        ? `Imported ${added} new verb${added === 1 ? "" : "s"} (${importedVerbs.length} total in file) from “${file.name}”! 🎉`
         : `All ${importedVerbs.length} verb${importedVerbs.length === 1 ? "" : "s"} in “${file.name}” are already in your notebook ✓`
     );
   } catch (err) {
@@ -898,7 +904,7 @@ function init() {
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register("./sw.js?v=10")
+        .register("./sw.js?v=11")
         .then((reg) => {
           reg.update().catch(() => {});
           // Listen for updates and automatically refresh if new version found
