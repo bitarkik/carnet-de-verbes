@@ -2,16 +2,16 @@
 // Carnet de Verbes — Clean Accordion Notebook Controller (Muse-Inspired)
 // ==========================================================================
 
-import { lookupOfflineVerb, extractOfflineVerbsFromText } from "./french-engine.js?v=11";
+import { lookupOfflineVerb, extractOfflineVerbsFromText } from "./french-engine.js?v=12";
 import {
   testGeminiKey,
   lookupVerbWithAI,
   extractVerbsFromScreenshots,
   extractVerbsFromWordTextWithAI
-} from "./ai.js?v=11";
-import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=11";
-import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=11";
-import { createPracticeController } from "./practice.js?v=11";
+} from "./ai.js?v=12";
+import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=12";
+import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=12";
+import { createPracticeController } from "./practice.js?v=12";
 
 const TENSES = [
   { key: "present", label: "Présent" },
@@ -198,7 +198,32 @@ async function handleAddVerb(rawText) {
   submitBtn.textContent = "Adding...";
 
   try {
-    // 1. Instant offline validated check
+    // 0. Check if this verb or conjugated form is ALREADY in your personal saved notebook!
+    // Never waste an API call or wait 10 seconds if you already have it saved.
+    const cleanLower = trimmed.toLowerCase().replace(/’/g, "'").trim();
+    const existingVerb = verbs.find((v) => {
+      if (v.infinitive.toLowerCase() === cleanLower) return true;
+      // Also match if user typed a conjugated form that already exists in this saved verb
+      return Object.values(v.tenses || {}).some((forms) =>
+        (forms || []).some((f) => {
+          const c = f.replace(/\*/g, "").replace(/\(e\)|\(s\)/g, "").toLowerCase().trim();
+          if (c === cleanLower) return true;
+          const withoutSubj = c.replace(/^(il\/elle|ils\/elles|nous|vous|tu|je)\s+/, "").replace(/^j'/, "").trim();
+          return withoutSubj === cleanLower;
+        })
+      );
+    });
+
+    if (existingVerb) {
+      input.value = "";
+      activeFilter = "all";
+      openVerbId = existingVerb.infinitive;
+      render();
+      showMsg(`${existingVerb.infinitive} is already in your notebook — opened here.`);
+      return;
+    }
+
+    // 1. Instant offline validated check (140 core verbs)
     const offline = lookupOfflineVerb(trimmed);
     if (offline.ok) {
       if (trimmed.split(/\s+/).length >= 3) {
@@ -904,7 +929,7 @@ function init() {
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register("./sw.js?v=11")
+        .register("./sw.js?v=12")
         .then((reg) => {
           reg.update().catch(() => {});
           // Listen for updates and automatically refresh if new version found
