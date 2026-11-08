@@ -2,12 +2,14 @@
 // Live Google Gemini AI Integration (Verb Lookup, Screenshot Vision, Word Import)
 // ==========================================================================
 
-// Priority fallback cascade for free-tier Gemini API keys
+// Priority fallback cascade for Gemini models (supporting the latest 3.x Flash series)
 const MODELS = [
-  "gemini-2.0-flash",
-  "gemini-1.5-flash",
+  "gemini-3.8-flash",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash-lite",
   "gemini-2.5-flash",
-  "gemini-2.0-flash-lite"
+  "gemini-2.0-flash",
+  "gemini-1.5-flash"
 ];
 
 const VERB_ENTRY_SCHEMA_PROMPT = `
