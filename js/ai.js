@@ -2,14 +2,12 @@
 // Live Google Gemini AI Integration (Verb Lookup, Screenshot Vision, Word Import)
 // ==========================================================================
 
-// Priority fallback cascade for Gemini models (supporting the latest 3.x Flash series)
+// Models ordered for maximum response speed & availability
 const MODELS = [
-  "gemini-3.8-flash",
+  "gemini-3.5-flash-lite", // ultra-fast (~1s) low-latency model
+  "gemini-3.8-flash",      // current standard flash model
   "gemini-3.6-flash",
-  "gemini-3.5-flash-lite",
-  "gemini-2.5-flash",
-  "gemini-2.0-flash",
-  "gemini-1.5-flash"
+  "gemini-2.5-flash"
 ];
 
 const VERB_ENTRY_SCHEMA_PROMPT = `
@@ -67,32 +65,53 @@ async function callGemini(apiKey, contents) {
   let lastErr = null;
   for (const model of MODELS) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents,
-        generationConfig: {
-          temperature: 0.2,
-          responseMimeType: "application/json"
-        }
-      })
-    });
+    
+    // Set up generation config with low thinking level so model doesn't spend 20+ seconds overthinking a verb
+    const generationConfig = {
+      responseMimeType: "application/json",
+      thinkingConfig: {
+        thinkingLevel: "low"
+      }
+    };
 
-    if (!res.ok) {
-      const errBody = await res.json().catch(() => ({}));
-      const msg = errBody?.error?.message || `Gemini HTTP ${res.status}`;
-      lastErr = new Error(msg);
-      if (res.status === 400 || res.status === 401 || res.status === 403) {
-        throw lastErr;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000); // 12-second timeout per model attempt
+
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          contents,
+          generationConfig
+        })
+      });
+
+      clearTimeout(timer);
+
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        const msg = errBody?.error?.message || `Gemini HTTP ${res.status}`;
+        lastErr = new Error(msg);
+        if (res.status === 400 || res.status === 401 || res.status === 403) {
+          throw lastErr;
+        }
+        continue;
+      }
+
+      const data = await res.json();
+      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!rawText) throw new Error("Empty response from Gemini.");
+      return JSON.parse(rawText);
+    } catch (fetchErr) {
+      clearTimeout(timer);
+      lastErr = fetchErr;
+      if (fetchErr.name === "AbortError") {
+        lastErr = new Error(`Model ${model} timed out. Trying faster fallback...`);
       }
       continue;
     }
-
-    const data = await res.json();
-    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!rawText) throw new Error("Empty response from Gemini.");
-    return JSON.parse(rawText);
   }
   throw lastErr || new Error("Could not reach Gemini API.");
 }
