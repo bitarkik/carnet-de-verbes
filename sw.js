@@ -1,4 +1,4 @@
-const CACHE_NAME = "carnet-de-verbes-v5";
+const CACHE_NAME = "carnet-de-verbes-v6";
 const CORE_ASSETS = [
   "./",
   "./index.html",

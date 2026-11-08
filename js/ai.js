@@ -100,8 +100,14 @@ async function callGemini(apiKey, contents) {
       }
 
       const data = await res.json();
-      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      const parts = data?.candidates?.[0]?.content?.parts || [];
+      // In Gemini 3, internal reasoning has thought: true, final answer has thought: false or undefined
+      const answerPart = parts.find((p) => !p.thought && p.text) || parts.find((p) => p.text);
+      let rawText = answerPart?.text?.trim();
       if (!rawText) throw new Error("Empty response from Gemini.");
+      
+      // Clean possible ```json ``` markdown code blocks
+      rawText = rawText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
       return JSON.parse(rawText);
     } catch (fetchErr) {
       clearTimeout(timer);
