@@ -719,13 +719,29 @@ const SPECS = {
   "rendre": { m: "to give back / return (an object)", tipExtra: "rendre visite à qqn = to visit a person (visiter is only for places!).", ex: ["Nous rendons visite à nos grands-parents.", "We are visiting our grandparents."] }
 };
 
+export function stripAccents(str) {
+  return String(str || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/œ/g, "oe")
+    .replace(/æ/g, "ae")
+    .trim();
+}
+
 // Build full offline dictionary + automatic reverse conjugated lookup index
 export const OFFLINE_DICTIONARY = {};
 export const CONJUGATED_INDEX = {};
+export const UNACCENTED_INDEX = {};
 
 for (const [inf, spec] of Object.entries(SPECS)) {
   const entry = buildFromSpec(inf, spec);
   OFFLINE_DICTIONARY[inf] = entry;
+
+  const unaccentedInf = stripAccents(inf);
+  if (!UNACCENTED_INDEX[unaccentedInf]) {
+    UNACCENTED_INDEX[unaccentedInf] = inf;
+  }
 
   for (const forms of Object.values(entry.tenses)) {
     for (const rawForm of forms) {
@@ -735,22 +751,38 @@ for (const [inf, spec] of Object.entries(SPECS)) {
       if (!CONJUGATED_INDEX[cleanFull]) {
         CONJUGATED_INDEX[cleanFull] = inf;
       }
+      const unaccentedFull = stripAccents(cleanFull);
+      if (!UNACCENTED_INDEX[unaccentedFull]) {
+        UNACCENTED_INDEX[unaccentedFull] = inf;
+      }
 
       // Also index bare verb token(s) without subject pronoun
       const withoutSubj = cleanFull
         .replace(/^(il\/elle|ils\/elles|nous|vous|tu|je)\s+/, "")
         .replace(/^j'/, "")
         .trim();
-      if (withoutSubj && withoutSubj.length >= 2 && !CONJUGATED_INDEX[withoutSubj]) {
-        CONJUGATED_INDEX[withoutSubj] = inf;
+      if (withoutSubj && withoutSubj.length >= 2) {
+        if (!CONJUGATED_INDEX[withoutSubj]) {
+          CONJUGATED_INDEX[withoutSubj] = inf;
+        }
+        const unaccentedWithout = stripAccents(withoutSubj);
+        if (!UNACCENTED_INDEX[unaccentedWithout]) {
+          UNACCENTED_INDEX[unaccentedWithout] = inf;
+        }
       }
     }
   }
-  if (entry.pastParticiple && !CONJUGATED_INDEX[entry.pastParticiple]) {
-    CONJUGATED_INDEX[entry.pastParticiple] = inf;
-    CONJUGATED_INDEX[entry.pastParticiple + "e"] = inf;
-    CONJUGATED_INDEX[entry.pastParticiple + "s"] = inf;
-    CONJUGATED_INDEX[entry.pastParticiple + "es"] = inf;
+  if (entry.pastParticiple) {
+    for (const suffix of ["", "e", "s", "es"]) {
+      const ppForm = entry.pastParticiple + suffix;
+      if (!CONJUGATED_INDEX[ppForm]) {
+        CONJUGATED_INDEX[ppForm] = inf;
+      }
+      const unaccentedPp = stripAccents(ppForm);
+      if (!UNACCENTED_INDEX[unaccentedPp]) {
+        UNACCENTED_INDEX[unaccentedPp] = inf;
+      }
+    }
   }
 }
 
@@ -783,6 +815,17 @@ export function lookupOfflineVerb(rawInput) {
     };
   }
 
+  // 2b. Unaccented match (e.g. typing "etre" matches "être", "detester" matches "détester")
+  const unaccented = stripAccents(cleaned);
+  if (UNACCENTED_INDEX[unaccented]) {
+    const inf = UNACCENTED_INDEX[unaccented];
+    return {
+      ok: true,
+      verb: structuredClone(OFFLINE_DICTIONARY[inf]),
+      detectedFrom: inf !== rawInput.trim() ? rawInput.trim() : null
+    };
+  }
+
   // 3. Scan 3-word, 2-word, and 1-word tokens inside a Duolingo phrase (e.g. "nous avons pris le train")
   const words = cleaned.split(" ");
   const STOP_AUX = new Set(["ai", "as", "a", "avons", "avez", "ont", "suis", "es", "est", "sommes", "êtes", "sont"]);
@@ -791,6 +834,11 @@ export function lookupOfflineVerb(rawInput) {
     const triple = `${words[i]} ${words[i + 1]} ${words[i + 2]}`;
     if (CONJUGATED_INDEX[triple]) {
       const inf = CONJUGATED_INDEX[triple];
+      return { ok: true, verb: structuredClone(OFFLINE_DICTIONARY[inf]), detectedFrom: rawInput.trim() };
+    }
+    const unaccTriple = stripAccents(triple);
+    if (UNACCENTED_INDEX[unaccTriple]) {
+      const inf = UNACCENTED_INDEX[unaccTriple];
       return { ok: true, verb: structuredClone(OFFLINE_DICTIONARY[inf]), detectedFrom: rawInput.trim() };
     }
   }
@@ -804,10 +852,15 @@ export function lookupOfflineVerb(rawInput) {
       const inf = CONJUGATED_INDEX[pair];
       return { ok: true, verb: structuredClone(OFFLINE_DICTIONARY[inf]), detectedFrom: rawInput.trim() };
     }
+    const unaccPair = stripAccents(pair);
+    if (UNACCENTED_INDEX[unaccPair]) {
+      const inf = UNACCENTED_INDEX[unaccPair];
+      return { ok: true, verb: structuredClone(OFFLINE_DICTIONARY[inf]), detectedFrom: rawInput.trim() };
+    }
   }
 
   for (const w of words) {
-    const stripped = w.replace(/^(j'|m'|t'|s'|n'|l'|qu')/, "");
+    const stripped = w.replace(/^(j'|m'|t'|s'|n'|l'|qu')/, "").replace(/^(j|m|t|s|n|l|qu)\s+/, "");
     for (const candidate of [w, stripped]) {
       if (!candidate || (words.length > 1 && STOP_AUX.has(candidate))) continue;
       if (OFFLINE_DICTIONARY[candidate]) {
@@ -816,6 +869,11 @@ export function lookupOfflineVerb(rawInput) {
       if (CONJUGATED_INDEX[candidate]) {
         const inf = CONJUGATED_INDEX[candidate];
         return { ok: true, verb: structuredClone(OFFLINE_DICTIONARY[inf]), detectedFrom: rawInput.trim() };
+      }
+      const unaccCand = stripAccents(candidate);
+      if (UNACCENTED_INDEX[unaccCand]) {
+        const inf = UNACCENTED_INDEX[unaccCand];
+        return { ok: true, verb: structuredClone(OFFLINE_DICTIONARY[inf]), detectedFrom: words.length > 1 ? rawInput.trim() : null };
       }
     }
   }

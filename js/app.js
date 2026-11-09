@@ -2,16 +2,16 @@
 // Carnet de Verbes — Clean Accordion Notebook Controller (Muse-Inspired)
 // ==========================================================================
 
-import { lookupOfflineVerb, extractOfflineVerbsFromText } from "./french-engine.js?v=13";
+import { lookupOfflineVerb, extractOfflineVerbsFromText, stripAccents } from "./french-engine.js?v=14";
 import {
   testGeminiKey,
   lookupVerbWithAI,
   extractVerbsFromScreenshots,
   extractVerbsFromWordTextWithAI
-} from "./ai.js?v=13";
-import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=13";
-import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=13";
-import { createPracticeController } from "./practice.js?v=13";
+} from "./ai.js?v=14";
+import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=14";
+import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=14";
+import { createPracticeController } from "./practice.js?v=14";
 
 const TENSES = [
   { key: "present", label: "Présent" },
@@ -197,19 +197,38 @@ async function handleAddVerb(rawText) {
   submitBtn.disabled = true;
   submitBtn.textContent = "Adding...";
 
+  // Clear any existing search query so the notebook immediately shows the added/selected verb
+  const searchInput = $("search-input");
+  if (searchInput && searchInput.value) {
+    searchInput.value = "";
+  }
+
+  const scrollToVerb = (infinitive) => {
+    requestAnimationFrame(() => {
+      const card = document.querySelector(`[data-card-inf="${CSS.escape(infinitive)}"]`);
+      if (card) {
+        card.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    });
+  };
+
   try {
     // 0. Check if this verb or conjugated form is ALREADY in your personal saved notebook!
     // Never waste an API call or wait 10 seconds if you already have it saved.
     const cleanLower = trimmed.toLowerCase().replace(/’/g, "'").trim();
+    const unaccentedInput = stripAccents(cleanLower);
+
     const existingVerb = verbs.find((v) => {
-      if (v.infinitive.toLowerCase() === cleanLower) return true;
+      if (v.infinitive.toLowerCase() === cleanLower || stripAccents(v.infinitive) === unaccentedInput) {
+        return true;
+      }
       // Also match if user typed a conjugated form that already exists in this saved verb
       return Object.values(v.tenses || {}).some((forms) =>
         (forms || []).some((f) => {
           const c = f.replace(/\*/g, "").replace(/\(e\)|\(s\)/g, "").toLowerCase().trim();
-          if (c === cleanLower) return true;
+          if (c === cleanLower || stripAccents(c) === unaccentedInput) return true;
           const withoutSubj = c.replace(/^(il\/elle|ils\/elles|nous|vous|tu|je)\s+/, "").replace(/^j'/, "").trim();
-          return withoutSubj === cleanLower;
+          return withoutSubj === cleanLower || stripAccents(withoutSubj) === unaccentedInput;
         })
       );
     });
@@ -219,6 +238,7 @@ async function handleAddVerb(rawText) {
       activeFilter = "all";
       openVerbId = existingVerb.infinitive;
       render();
+      scrollToVerb(existingVerb.infinitive);
       showMsg(`${existingVerb.infinitive} is already in your notebook — opened here.`);
       return;
     }
@@ -235,6 +255,7 @@ async function handleAddVerb(rawText) {
       input.value = "";
       activeFilter = "all";
       const { alreadyExisted, verb } = upsertVerb(offline.verb);
+      scrollToVerb(verb.infinitive);
       showMsg(
         alreadyExisted
           ? `${verb.infinitive} is already in your notebook — opened here.`
@@ -255,6 +276,7 @@ async function handleAddVerb(rawText) {
       input.value = "";
       activeFilter = "all";
       const { alreadyExisted, verb } = upsertVerb(aiRes.verb);
+      scrollToVerb(verb.infinitive);
       showMsg(
         alreadyExisted
           ? `${verb.infinitive} is already in your notebook — opened here.`
@@ -305,7 +327,8 @@ function undoDelete() {
 
 // ---------- Filter & Sort ----------
 function getFilteredVerbs() {
-  const q = ($("search-input")?.value || "").toLowerCase().trim();
+  const rawQ = $("search-input")?.value || "";
+  const q = stripAccents(rawQ);
 
   const filtered = verbs.filter((v) => {
     if (activeFilter === "etre" && v.auxiliary !== "être") return false;
@@ -313,11 +336,15 @@ function getFilteredVerbs() {
     if (activeFilter === "reflexive" && !v.isReflexive) return false;
 
     if (!q) return true;
-    if ((v.infinitive || "").toLowerCase().includes(q) || (v.meaning || "").toLowerCase().includes(q) || (v.note || "").toLowerCase().includes(q)) {
+    if (
+      stripAccents(v.infinitive).includes(q) ||
+      stripAccents(v.meaning).includes(q) ||
+      stripAccents(v.note).includes(q)
+    ) {
       return true;
     }
     return Object.values(v.tenses || {}).some((arr) =>
-      (arr || []).some((form) => form.toLowerCase().includes(q))
+      (arr || []).some((form) => stripAccents(form).includes(q))
     );
   });
 
@@ -929,7 +956,7 @@ function init() {
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register("./sw.js?v=13")
+        .register("./sw.js?v=14")
         .then((reg) => {
           reg.update().catch(() => {});
           // Listen for updates and automatically refresh if new version found
