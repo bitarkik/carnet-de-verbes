@@ -2,16 +2,16 @@
 // Carnet de Verbes — Clean Accordion Notebook Controller (Muse-Inspired)
 // ==========================================================================
 
-import { lookupOfflineVerb, extractOfflineVerbsFromText, stripAccents } from "./french-engine.js?v=16";
+import { lookupOfflineVerb, extractOfflineVerbsFromText, stripAccents } from "./french-engine.js?v=17";
 import {
   testGeminiKey,
   lookupVerbWithAI,
   extractVerbsFromScreenshots,
   extractVerbsFromWordTextWithAI
-} from "./ai.js?v=16";
-import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=16";
-import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=16";
-import { createPracticeController } from "./practice.js?v=16";
+} from "./ai.js?v=17";
+import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=17";
+import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=17";
+import { createPracticeController } from "./practice.js?v=17";
 
 const TENSES = [
   { key: "present", label: "Présent" },
@@ -864,7 +864,7 @@ function init() {
   $("quick-export-docx-btn").addEventListener("click", handleDownloadDocx);
   $("quick-export-json-btn").addEventListener("click", handleDownloadJsonBackup);
   document.addEventListener("click", (e) => {
-    if (!e.target.closest(".sub-toolbar")) {
+    if (!e.target.closest(".export-wrap")) {
       $("quick-export-menu")?.classList.add("hidden");
     }
   });
@@ -973,7 +973,7 @@ function init() {
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register("./sw.js?v=16")
+        .register("./sw.js?v=17")
         .then((reg) => {
           reg.update().catch(() => {});
           // Listen for updates and automatically refresh if new version found
