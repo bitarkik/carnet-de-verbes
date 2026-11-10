@@ -1,14 +1,14 @@
-const CACHE_NAME = "carnet-de-verbes-v17";
+const CACHE_NAME = "carnet-de-verbes-v18";
 const CORE_ASSETS = [
   "./",
   "./index.html",
-  "./css/styles.css?v=17",
-  "./js/app.js?v=17",
-  "./js/french-engine.js?v=17",
-  "./js/ai.js?v=17",
-  "./js/word-io.js?v=17",
-  "./js/sync.js?v=17",
-  "./js/practice.js?v=17",
+  "./css/styles.css?v=18",
+  "./js/app.js?v=18",
+  "./js/french-engine.js?v=18",
+  "./js/ai.js?v=18",
+  "./js/word-io.js?v=18",
+  "./js/sync.js?v=18",
+  "./js/practice.js?v=18",
   "./assets/icon.svg",
   "./assets/icon-180.png",
   "./assets/icon-192.png",

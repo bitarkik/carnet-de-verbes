@@ -2,16 +2,16 @@
 // Carnet de Verbes — Clean Accordion Notebook Controller (Muse-Inspired)
 // ==========================================================================
 
-import { lookupOfflineVerb, extractOfflineVerbsFromText, stripAccents } from "./french-engine.js?v=17";
+import { lookupOfflineVerb, extractOfflineVerbsFromText, stripAccents } from "./french-engine.js?v=18";
 import {
   testGeminiKey,
   lookupVerbWithAI,
   extractVerbsFromScreenshots,
   extractVerbsFromWordTextWithAI
-} from "./ai.js?v=17";
-import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=17";
-import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=17";
-import { createPracticeController } from "./practice.js?v=17";
+} from "./ai.js?v=18";
+import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=18";
+import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=18";
+import { createPracticeController } from "./practice.js?v=18";
 
 const TENSES = [
   { key: "present", label: "Présent" },
@@ -391,7 +391,7 @@ function render() {
   $("sort-recent-btn").classList.toggle("active", currentSort === "recent");
 
   // Update Filter Pills
-  document.querySelectorAll(".sub-toolbar .pill-btn[data-filter]").forEach((p) => {
+  document.querySelectorAll(".pill-btn[data-filter]").forEach((p) => {
     p.classList.toggle("active", p.dataset.filter === activeFilter);
   });
 
@@ -850,7 +850,7 @@ function init() {
   });
 
   // Filter Pills
-  document.querySelectorAll(".sub-toolbar .pill-btn[data-filter]").forEach((p) => {
+  document.querySelectorAll(".pill-btn[data-filter]").forEach((p) => {
     p.addEventListener("click", () => {
       activeFilter = p.dataset.filter;
       render();
@@ -973,7 +973,7 @@ function init() {
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register("./sw.js?v=17")
+        .register("./sw.js?v=18")
         .then((reg) => {
           reg.update().catch(() => {});
           // Listen for updates and automatically refresh if new version found
