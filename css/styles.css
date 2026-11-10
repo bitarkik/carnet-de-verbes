@@ -352,14 +352,22 @@ textarea:focus {
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 12px;
-  flex-wrap: wrap;
   position: relative;
 }
 
 .filter-pills {
   display: flex;
   gap: 6px;
-  flex-wrap: wrap;
+  overflow-x: auto;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+  padding: 2px 2px 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.filter-pills::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
 }
 
 .pill-btn {
@@ -373,6 +381,8 @@ textarea:focus {
   cursor: pointer;
   color: var(--text-secondary);
   transition: all 0.14s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .pill-btn:hover {
@@ -506,13 +516,16 @@ textarea:focus {
   font-weight: 700;
   color: var(--text-title);
   letter-spacing: -0.01em;
+  display: inline-flex;
+  align-items: center;
 }
 
 .meaning {
   color: var(--text-muted);
   font-style: italic;
-  font-size: 16px;
-  margin-left: 6px;
+  font-size: 15.5px;
+  margin-left: 2px;
+  line-height: 1.35;
 }
 
 .badges {

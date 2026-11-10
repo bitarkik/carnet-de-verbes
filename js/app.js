@@ -2,16 +2,16 @@
 // Carnet de Verbes — Clean Accordion Notebook Controller (Muse-Inspired)
 // ==========================================================================
 
-import { lookupOfflineVerb, extractOfflineVerbsFromText, stripAccents } from "./french-engine.js?v=15";
+import { lookupOfflineVerb, extractOfflineVerbsFromText, stripAccents } from "./french-engine.js?v=16";
 import {
   testGeminiKey,
   lookupVerbWithAI,
   extractVerbsFromScreenshots,
   extractVerbsFromWordTextWithAI
-} from "./ai.js?v=15";
-import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=15";
-import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=15";
-import { createPracticeController } from "./practice.js?v=15";
+} from "./ai.js?v=16";
+import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=16";
+import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=16";
+import { createPracticeController } from "./practice.js?v=16";
 
 const TENSES = [
   { key: "present", label: "Présent" },
@@ -449,7 +449,7 @@ function render() {
               </div>
               <div class="badges">
                 ${isImpersonal ? `<span class="badge badge-purple">impersonal</span>` : ""}
-                ${v.isIrregular ? `<span class="badge badge-irreg">${esc(v.group)}</span>` : `<span class="badge">${esc(v.group)}</span>`}
+                ${!isImpersonal && v.isIrregular ? `<span class="badge badge-irreg">${esc(v.group)}</span>` : !isImpersonal ? `<span class="badge">${esc(v.group)}</span>` : ""}
                 <span class="badge ${v.auxiliary === "être" ? "badge-etre" : ""}">${v.auxiliary === "être" ? "aux. être" : "aux. avoir"}</span>
                 ${v.isReflexive ? `<span class="badge badge-emerald">reflexive</span>` : ""}
               </div>
@@ -973,7 +973,7 @@ function init() {
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register("./sw.js?v=15")
+        .register("./sw.js?v=16")
         .then((reg) => {
           reg.update().catch(() => {});
           // Listen for updates and automatically refresh if new version found
