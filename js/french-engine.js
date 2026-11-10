@@ -85,14 +85,15 @@ function buildFromSpec(infinitive, spec) {
     }
   }
 
-  // Impersonal verbs (falloir, pleuvoir)
+  // Impersonal verbs (falloir, pleuvoir, neiger)
   if (spec.impersonal) {
     return {
       infinitive: raw,
       meaning: spec.m,
-      group: spec.group || "Impersonal Irregular",
+      group: spec.group || "Impersonal Verb",
       isIrregular: true,
       isReflexive: false,
+      isImpersonal: true,
       auxiliary: "avoir",
       pastParticiple: pp,
       duolingoContext: { fr: spec.ex[0], en: spec.ex[1] },

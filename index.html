@@ -12,7 +12,7 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./assets/icon-192.png" />
   <link rel="apple-touch-icon" href="./assets/icon-180.png" />
   <link rel="manifest" href="./manifest.webmanifest" />
-  <link rel="stylesheet" href="./css/styles.css?v=14" />
+  <link rel="stylesheet" href="./css/styles.css?v=15" />
 </head>
 <body>
   <div class="wrap">
@@ -80,6 +80,7 @@
           <button type="button" class="pill-btn" data-filter="etre">aux. être</button>
           <button type="button" class="pill-btn" data-filter="irregular">irregular</button>
           <button type="button" class="pill-btn" data-filter="reflexive">reflexive</button>
+          <button type="button" class="pill-btn" data-filter="impersonal">impersonal</button>
         </div>
 
         <button id="toolbar-export-btn" type="button" class="pill-btn export-pill">
@@ -114,6 +115,13 @@
       <footer class="footer">
         Saved in this browser • Works on phone &amp; laptop • Opens right next to Duolingo
       </footer>
+
+      <!-- Floating Scroll to Top Arrow -->
+      <button id="scroll-top-btn" type="button" class="scroll-top-btn hidden" aria-label="Scroll to top" title="Scroll to top">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="18 15 12 9 6 15"></polyline>
+        </svg>
+      </button>
     </main>
 
     <!-- 2-Minute Practice View -->
@@ -305,6 +313,6 @@
   <input id="import-docx-file-input" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="hidden" />
   <input id="import-json-file-input" type="file" accept=".json,application/json" class="hidden" />
 
-  <script type="module" src="./js/app.js?v=14"></script>
+  <script type="module" src="./js/app.js?v=15"></script>
 </body>
 </html>

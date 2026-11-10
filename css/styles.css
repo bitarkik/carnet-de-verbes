@@ -477,9 +477,26 @@ textarea:focus {
 
 .card-title-row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 6px;
+}
+
+.title-speak-btn {
+  background: transparent;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 4px;
+  opacity: 0.6;
+  border-radius: 6px;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+  line-height: 1;
+}
+
+.title-speak-btn:hover {
+  opacity: 1;
+  transform: scale(1.15);
 }
 
 .card-head h2 {
@@ -532,6 +549,18 @@ textarea:focus {
   background: var(--accent-soft);
   color: var(--accent-soft-fg);
   border-color: var(--accent-border);
+}
+
+.badge.badge-purple {
+  background: #f3e8ff;
+  color: #6b21a8;
+  border-color: #d8b4fe;
+}
+
+[data-theme="dark"] .badge.badge-purple {
+  background: #3b0764;
+  color: #e9d5ff;
+  border-color: #581c87;
 }
 
 .chev {
@@ -1208,6 +1237,35 @@ textarea:focus {
   font-size: 13px;
   font-family: var(--font-sans);
   margin-top: 28px;
+}
+
+/* Floating Scroll to Top Arrow */
+.scroll-top-btn {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--text-primary);
+  color: var(--bg-card);
+  border: none;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 99;
+  transition: opacity 0.2s ease, transform 0.2s ease, background-color 0.15s ease;
+}
+
+.scroll-top-btn:hover {
+  transform: translateY(-3px) scale(1.05);
+  background: var(--accent);
+}
+
+.scroll-top-btn:active {
+  transform: translateY(0) scale(0.95);
 }
 
 @keyframes fadeIn {

@@ -2,16 +2,16 @@
 // Carnet de Verbes — Clean Accordion Notebook Controller (Muse-Inspired)
 // ==========================================================================
 
-import { lookupOfflineVerb, extractOfflineVerbsFromText, stripAccents } from "./french-engine.js?v=14";
+import { lookupOfflineVerb, extractOfflineVerbsFromText, stripAccents } from "./french-engine.js?v=15";
 import {
   testGeminiKey,
   lookupVerbWithAI,
   extractVerbsFromScreenshots,
   extractVerbsFromWordTextWithAI
-} from "./ai.js?v=14";
-import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=14";
-import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=14";
-import { createPracticeController } from "./practice.js?v=14";
+} from "./ai.js?v=15";
+import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=15";
+import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=15";
+import { createPracticeController } from "./practice.js?v=15";
 
 const TENSES = [
   { key: "present", label: "Présent" },
@@ -334,6 +334,7 @@ function getFilteredVerbs() {
     if (activeFilter === "etre" && v.auxiliary !== "être") return false;
     if (activeFilter === "irregular" && !v.isIrregular) return false;
     if (activeFilter === "reflexive" && !v.isReflexive) return false;
+    if (activeFilter === "impersonal" && !v.isImpersonal && !["falloir", "pleuvoir", "neiger"].includes(v.infinitive.toLowerCase())) return false;
 
     if (!q) return true;
     if (
@@ -435,15 +436,19 @@ function render() {
         })
         .join("");
 
-      return `
+        const isImpersonal = v.isImpersonal || ["falloir", "pleuvoir", "neiger"].includes(v.infinitive.toLowerCase());
+
+        return `
         <article class="card ${isOpen ? "open" : ""}" data-card-inf="${esc(v.infinitive)}">
           <div class="card-head" data-toggle="${esc(v.infinitive)}">
             <div>
               <div class="card-title-row">
                 <h2>${esc(v.infinitive)}</h2>
+                <button type="button" class="title-speak-btn" data-speak="${esc(v.infinitive)}" title="Pronounce ${esc(v.infinitive)}" aria-label="Pronounce ${esc(v.infinitive)}">🔊</button>
                 <span class="meaning">— ${esc(v.meaning)}</span>
               </div>
               <div class="badges">
+                ${isImpersonal ? `<span class="badge badge-purple">impersonal</span>` : ""}
                 ${v.isIrregular ? `<span class="badge badge-irreg">${esc(v.group)}</span>` : `<span class="badge">${esc(v.group)}</span>`}
                 <span class="badge ${v.auxiliary === "être" ? "badge-etre" : ""}">${v.auxiliary === "être" ? "aux. être" : "aux. avoir"}</span>
                 ${v.isReflexive ? `<span class="badge badge-emerald">reflexive</span>` : ""}
@@ -512,8 +517,7 @@ function render() {
             </div>
 
             <!-- Card Actions -->
-            <div class="card-actions-row">
-              <button type="button" class="pill-btn" data-speak="${esc(v.infinitive)}">🔊 Pronounce French</button>
+            <div class="card-actions-row" style="justify-content: flex-end;">
               <button type="button" class="danger-btn" data-del="${esc(v.infinitive)}">Delete verb</button>
             </div>
           </div>
@@ -948,6 +952,19 @@ function init() {
     }
   });
 
+  // Floating Scroll to Top Arrow
+  const scrollTopBtn = $("scroll-top-btn");
+  if (scrollTopBtn) {
+    window.addEventListener("scroll", () => {
+      const shouldShow = window.scrollY > 280;
+      scrollTopBtn.classList.toggle("hidden", !shouldShow);
+    }, { passive: true });
+
+    scrollTopBtn.addEventListener("click", () => {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  }
+
   render();
   updateDrawerNotes();
   if (settings.githubToken) runCloudSync({ quiet: true });
@@ -956,7 +973,7 @@ function init() {
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register("./sw.js?v=14")
+        .register("./sw.js?v=15")
         .then((reg) => {
           reg.update().catch(() => {});
           // Listen for updates and automatically refresh if new version found
