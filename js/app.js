@@ -8,16 +8,16 @@ import {
   stripAccents,
   normalizeVerbEntry,
   getReflexiveCounterpart
-} from "./french-engine.js?v=19";
+} from "./french-engine.js?v=20";
 import {
   testGeminiKey,
   lookupVerbWithAI,
   extractVerbsFromScreenshots,
   extractVerbsFromWordTextWithAI
-} from "./ai.js?v=19";
-import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=19";
-import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=19";
-import { createPracticeController } from "./practice.js?v=19";
+} from "./ai.js?v=20";
+import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=20";
+import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=20";
+import { createPracticeController } from "./practice.js?v=20";
 
 const TENSES = [
   { key: "present", label: "Présent" },
@@ -226,12 +226,13 @@ async function handleAddVerb(rawText) {
     const cleanLower = trimmed.toLowerCase().replace(/’/g, "'").trim();
     const unaccentedInput = stripAccents(cleanLower);
 
-    const existingVerb = verbs.find((v) => {
-      if (v.infinitive.toLowerCase() === cleanLower || stripAccents(v.infinitive) === unaccentedInput) {
+    let matchedVariantInf = null;
+    const verbMatchesInput = (candidate) => {
+      if (!candidate) return false;
+      if (candidate.infinitive.toLowerCase() === cleanLower || stripAccents(candidate.infinitive) === unaccentedInput) {
         return true;
       }
-      // Also match if user typed a conjugated form that already exists in this saved verb
-      return Object.values(v.tenses || {}).some((forms) =>
+      return Object.values(candidate.tenses || {}).some((forms) =>
         (forms || []).some((f) => {
           const c = f.replace(/\*/g, "").replace(/\(e\)|\(s\)/g, "").toLowerCase().trim();
           if (c === cleanLower || stripAccents(c) === unaccentedInput) return true;
@@ -239,15 +240,32 @@ async function handleAddVerb(rawText) {
           return withoutSubj === cleanLower || stripAccents(withoutSubj) === unaccentedInput;
         })
       );
+    };
+
+    const existingVerb = verbs.find((v) => {
+      if (verbMatchesInput(v)) {
+        matchedVariantInf = null;
+        return true;
+      }
+      if (v.counterpartData && verbMatchesInput(v.counterpartData)) {
+        matchedVariantInf = v.counterpartData.infinitive;
+        return true;
+      }
+      return false;
     });
 
     if (existingVerb) {
       input.value = "";
       activeFilter = "all";
       openVerbId = existingVerb.infinitive;
+      if (matchedVariantInf) {
+        activeVariantMap[existingVerb.infinitive] = matchedVariantInf;
+      } else {
+        delete activeVariantMap[existingVerb.infinitive];
+      }
       render();
       scrollToVerb(existingVerb.infinitive);
-      showMsg(`${existingVerb.infinitive} is already in your notebook — opened here.`);
+      showMsg(`${matchedVariantInf || existingVerb.infinitive} is already in your notebook — opened here.`);
       return;
     }
 
@@ -345,16 +363,20 @@ function getFilteredVerbs() {
     if (activeFilter === "impersonal" && !v.isImpersonal && !["falloir", "pleuvoir", "neiger"].includes(v.infinitive.toLowerCase())) return false;
 
     if (!q) return true;
-    if (
-      stripAccents(v.infinitive).includes(q) ||
-      stripAccents(v.meaning).includes(q) ||
-      stripAccents(v.note).includes(q)
-    ) {
-      return true;
-    }
-    return Object.values(v.tenses || {}).some((arr) =>
-      (arr || []).some((form) => stripAccents(form).includes(q))
-    );
+    const matchesObj = (obj) => {
+      if (!obj) return false;
+      if (
+        stripAccents(obj.infinitive).includes(q) ||
+        stripAccents(obj.meaning).includes(q) ||
+        stripAccents(obj.note).includes(q)
+      ) {
+        return true;
+      }
+      return Object.values(obj.tenses || {}).some((arr) =>
+        (arr || []).some((form) => stripAccents(form).includes(q))
+      );
+    };
+    return matchesObj(v) || matchesObj(v.counterpartData);
   });
 
   return filtered.sort((a, b) => {
@@ -376,6 +398,75 @@ function formatVerbCell(rawForm) {
 
   const display = isHighlight ? `<span class="stem-highlight">${formWithoutSubject}</span>` : formWithoutSubject;
   return display;
+}
+
+// ---------- In-Card Reflexive / Non-Reflexive Switch ----------
+async function switchCardVariant(cardInfinitive, targetInfinitive, btnEl) {
+  if (targetInfinitive === cardInfinitive) {
+    delete activeVariantMap[cardInfinitive];
+    render();
+    return;
+  }
+
+  const cardVerb = verbs.find((v) => v.infinitive === cardInfinitive);
+  if (!cardVerb) return;
+
+  // 1. Already cached on this card
+  if (cardVerb.counterpartData?.infinitive === targetInfinitive) {
+    activeVariantMap[cardInfinitive] = targetInfinitive;
+    render();
+    return;
+  }
+
+  // 2. Already saved elsewhere in the notebook
+  const existingOther = verbs.find((v) => v.infinitive.toLowerCase() === targetInfinitive.toLowerCase());
+  if (existingOther) {
+    cardVerb.counterpartData = normalizeVerbEntry(existingOther);
+    activeVariantMap[cardInfinitive] = targetInfinitive;
+    persistAndScheduleSync();
+    render();
+    return;
+  }
+
+  // 3. Instant offline dictionary lookup
+  const offline = lookupOfflineVerb(targetInfinitive);
+  if (offline.ok) {
+    cardVerb.counterpartData = normalizeVerbEntry(offline.verb);
+    activeVariantMap[cardInfinitive] = targetInfinitive;
+    persistAndScheduleSync();
+    render();
+    return;
+  }
+
+  // 4. Gemini AI fallback if key is set
+  if (settings.geminiKey?.trim()) {
+    const origText = btnEl ? btnEl.textContent : "";
+    if (btnEl) {
+      btnEl.disabled = true;
+      btnEl.textContent = "Loading...";
+    }
+    try {
+      const aiRes = await lookupVerbWithAI(targetInfinitive, settings.geminiKey.trim());
+      if (!aiRes.ok) {
+        showMsg(aiRes.reason, { isError: true });
+        return;
+      }
+      cardVerb.counterpartData = aiRes.verb;
+      activeVariantMap[cardInfinitive] = targetInfinitive;
+      persistAndScheduleSync();
+      render();
+    } catch (err) {
+      showMsg(`Could not load ${targetInfinitive}: ${err.message}`, { isError: true });
+    } finally {
+      if (btnEl) {
+        btnEl.disabled = false;
+        btnEl.textContent = origText;
+      }
+    }
+    return;
+  }
+
+  showMsg(`Connect a Gemini API key in Settings (•••) to load “${targetInfinitive}”.`, { isError: true });
 }
 
 // ---------- Main Render (Accordion Cards) ----------
@@ -413,8 +504,15 @@ function render() {
   container.innerHTML = list
     .map((v) => {
       const isOpen = v.infinitive === openVerbId;
+      const counterpart = getReflexiveCounterpart(v.infinitive);
+      const activeVar = activeVariantMap[v.infinitive];
+      const isCounterpartActive = Boolean(
+        counterpart && activeVar === counterpart && v.counterpartData
+      );
+      const displayVerb = isCounterpartActive ? v.counterpartData : v;
+
       const currentTense = activeTenseMap[v.infinitive] || "present";
-      const forms = v.tenses?.[currentTense] || v.tenses?.present || [];
+      const forms = displayVerb.tenses?.[currentTense] || displayVerb.tenses?.present || [];
 
       // Build 3 row-pairs for the 2-column table:
       // Row 1: je (0) & tu (1)
@@ -444,37 +542,50 @@ function render() {
         })
         .join("");
 
-        const isImpersonal = Boolean(v.isImpersonal);
-        const counterpart = getReflexiveCounterpart(v.infinitive);
-        const hasCounterpartSaved = counterpart
-          ? verbs.some((item) => item.infinitive.toLowerCase() === counterpart)
-          : false;
-        const auxLabel = v.isDualAux
-          ? "aux. être / avoir"
-          : v.auxiliary === "être"
-            ? "aux. être"
-            : "aux. avoir";
+      const isImpersonal = Boolean(displayVerb.isImpersonal);
+      const auxLabel = displayVerb.isDualAux
+        ? "aux. être / avoir"
+        : displayVerb.auxiliary === "être"
+          ? "aux. être"
+          : "aux. avoir";
 
-        return `
+      return `
         <article class="card ${isOpen ? "open" : ""}" data-card-inf="${esc(v.infinitive)}">
           <div class="card-head" data-toggle="${esc(v.infinitive)}">
             <div>
               <div class="card-title-row">
-                <h2>${esc(v.infinitive)}</h2>
-                <button type="button" class="title-speak-btn" data-speak="${esc(v.infinitive)}" title="Pronounce ${esc(v.infinitive)}" aria-label="Pronounce ${esc(v.infinitive)}">🔊</button>
-                <span class="meaning">— ${esc(v.meaning)}</span>
+                <h2>${esc(displayVerb.infinitive)}</h2>
+                <button type="button" class="title-speak-btn" data-speak="${esc(displayVerb.infinitive)}" title="Pronounce ${esc(displayVerb.infinitive)}" aria-label="Pronounce ${esc(displayVerb.infinitive)}">🔊</button>
+                <span class="meaning">— ${esc(displayVerb.meaning)}</span>
               </div>
               <div class="badges">
                 ${isImpersonal ? `<span class="badge badge-purple">impersonal</span>` : ""}
-                ${!isImpersonal && v.isIrregular ? `<span class="badge badge-irreg">${esc(v.group)}</span>` : !isImpersonal ? `<span class="badge">${esc(v.group)}</span>` : ""}
-                <span class="badge ${v.auxiliary === "être" ? "badge-etre" : ""}">${auxLabel}</span>
-                ${v.isReflexive ? `<span class="badge badge-emerald">reflexive</span>` : ""}
+                ${!isImpersonal && displayVerb.isIrregular ? `<span class="badge badge-irreg">${esc(displayVerb.group)}</span>` : !isImpersonal ? `<span class="badge">${esc(displayVerb.group)}</span>` : ""}
+                <span class="badge ${displayVerb.auxiliary === "être" ? "badge-etre" : ""}">${auxLabel}</span>
+                ${displayVerb.isReflexive ? `<span class="badge badge-emerald">reflexive</span>` : ""}
               </div>
             </div>
             <div class="chev">${isOpen ? "▲" : "▼"}</div>
           </div>
 
           <div class="card-body">
+            ${counterpart ? `
+              <div class="variant-switch" role="group" aria-label="Switch between normal and reflexive form">
+                <button
+                  type="button"
+                  class="variant-btn ${!isCounterpartActive ? "on" : ""}"
+                  data-variant-for="${esc(v.infinitive)}"
+                  data-variant-target="${esc(v.infinitive)}"
+                >${esc(v.infinitive)}</button>
+                <button
+                  type="button"
+                  class="variant-btn ${isCounterpartActive ? "on" : ""}"
+                  data-variant-for="${esc(v.infinitive)}"
+                  data-variant-target="${esc(counterpart)}"
+                >${esc(counterpart)}</button>
+              </div>
+            ` : ""}
+
             <!-- Tense Pill Tabs -->
             <div class="tabs">
               ${TENSES.map((t) => `
@@ -493,13 +604,13 @@ function render() {
             </div>
 
             <!-- Example / Duolingo Sentence Box -->
-            ${v.duolingoContext?.fr ? `
+            ${displayVerb.duolingoContext?.fr ? `
               <div class="example">
                 <div>
-                  <div class="fr">« ${esc(v.duolingoContext.fr)} »</div>
-                  <div class="en">${esc(v.duolingoContext.en || "")}</div>
+                  <div class="fr">« ${esc(displayVerb.duolingoContext.fr)} »</div>
+                  <div class="en">${esc(displayVerb.duolingoContext.en || "")}</div>
                 </div>
-                <button type="button" class="icon-circle-btn small" data-speak="${esc(v.duolingoContext.fr)}" title="Hear sentence">🔊</button>
+                <button type="button" class="icon-circle-btn small" data-speak="${esc(displayVerb.duolingoContext.fr)}" title="Hear sentence">🔊</button>
               </div>
             ` : ""}
 
@@ -507,19 +618,19 @@ function render() {
             <div class="insights-grid">
               <div class="insight-box">
                 <div class="insight-title">Auxiliary &amp; Agreement</div>
-                <div class="insight-text">${esc(v.duolingoTips?.auxiliaryNote || (v.auxiliary === "être" ? "Uses être in Passé Composé." : "Uses avoir."))}</div>
+                <div class="insight-text">${esc(displayVerb.duolingoTips?.auxiliaryNote || (displayVerb.auxiliary === "être" ? "Uses être in Passé Composé." : "Uses avoir."))}</div>
               </div>
               <div class="insight-box">
                 <div class="insight-title">Preposition Pattern</div>
-                <div class="insight-text">${esc(v.duolingoTips?.preposition || "Direct object or check context.")}</div>
+                <div class="insight-text">${esc(displayVerb.duolingoTips?.preposition || "Direct object or check context.")}</div>
               </div>
               <div class="insight-box">
                 <div class="insight-title">Pronunciation / Silent Endings</div>
-                <div class="insight-text">${esc(v.duolingoTips?.homophone || "Singular endings are silent in spoken French.")}</div>
+                <div class="insight-text">${esc(displayVerb.duolingoTips?.homophone || "Singular endings are silent in spoken French.")}</div>
               </div>
               <div class="insight-box">
                 <div class="insight-title">Memory Shortcut</div>
-                <div class="insight-text">${esc(v.duolingoTips?.extra || "Check stem changes across tenses.")}</div>
+                <div class="insight-text">${esc(displayVerb.duolingoTips?.extra || "Check stem changes across tenses.")}</div>
               </div>
             </div>
 
@@ -534,12 +645,7 @@ function render() {
             </div>
 
             <!-- Card Actions -->
-            <div class="card-actions-row" style="${counterpart ? "justify-content: space-between;" : "justify-content: flex-end;"}">
-              ${counterpart ? `
-                <button type="button" class="counterpart-btn" data-counterpart="${esc(counterpart)}">
-                  ${hasCounterpartSaved ? `🔗 Open ${esc(counterpart)}` : `🔗 + Add ${esc(counterpart)}`}
-                </button>
-              ` : ""}
+            <div class="card-actions-row" style="justify-content: flex-end;">
               <button type="button" class="danger-btn" data-del="${esc(v.infinitive)}">Delete verb</button>
             </div>
           </div>
@@ -564,6 +670,14 @@ function render() {
     });
   });
 
+  // Bind in-card variant switch
+  container.querySelectorAll("[data-variant-for]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      switchCardVariant(btn.dataset.variantFor, btn.dataset.variantTarget, btn);
+    });
+  });
+
   // Bind tense tabs
   container.querySelectorAll("[data-tense-for]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
@@ -584,14 +698,6 @@ function render() {
         target.updatedAt = Date.now();
         persistAndScheduleSync();
       }
-    });
-  });
-
-  // Bind 1-tap reflexive counterpart button
-  container.querySelectorAll("[data-counterpart]").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      handleAddVerb(btn.dataset.counterpart);
     });
   });
 
@@ -1003,7 +1109,7 @@ function init() {
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register("./sw.js?v=19")
+        .register("./sw.js?v=20")
         .then((reg) => {
           reg.update().catch(() => {});
           // Listen for updates and automatically refresh if new version found

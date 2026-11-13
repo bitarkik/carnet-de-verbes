@@ -2,7 +2,7 @@
 // Live Google Gemini AI Integration (Verb Lookup, Screenshot Vision, Word Import)
 // ==========================================================================
 
-import { normalizeVerbEntry } from "./french-engine.js?v=19";
+import { normalizeVerbEntry } from "./french-engine.js?v=20";
 
 // Modern Gemini 3.x Flash series models ordered by free-tier quota (500 RPD vs 20 RPD)
 const MODELS = [
