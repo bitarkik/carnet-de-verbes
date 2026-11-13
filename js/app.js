@@ -8,16 +8,16 @@ import {
   stripAccents,
   normalizeVerbEntry,
   getReflexiveCounterpart
-} from "./french-engine.js?v=20";
+} from "./french-engine.js?v=21";
 import {
   testGeminiKey,
   lookupVerbWithAI,
   extractVerbsFromScreenshots,
   extractVerbsFromWordTextWithAI
-} from "./ai.js?v=20";
-import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=20";
-import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=20";
-import { createPracticeController } from "./practice.js?v=20";
+} from "./ai.js?v=21";
+import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=21";
+import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=21";
+import { createPracticeController } from "./practice.js?v=21";
 
 const TENSES = [
   { key: "present", label: "Présent" },
@@ -37,6 +37,7 @@ verbs = verbs.map(normalizeVerbEntry);
 let settings = loadSettings();
 let openVerbId = verbs[0]?.infinitive || null;
 let activeTenseMap = {};
+let activeVariantMap = {};
 let activeFilter = "all";
 let currentSort = "recent"; // "recent" | "az"
 let lastDeletedBackup = null;
@@ -1109,7 +1110,7 @@ function init() {
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register("./sw.js?v=20")
+        .register("./sw.js?v=21")
         .then((reg) => {
           reg.update().catch(() => {});
           // Listen for updates and automatically refresh if new version found
