@@ -2,6 +2,8 @@
 // Live Google Gemini AI Integration (Verb Lookup, Screenshot Vision, Word Import)
 // ==========================================================================
 
+import { normalizeVerbEntry } from "./french-engine.js?v=19";
+
 // Modern Gemini 3.x Flash series models ordered by free-tier quota (500 RPD vs 20 RPD)
 const MODELS = [
   "gemini-3.5-flash-lite", // Primary: 500 requests/day & 15 requests/min (high quota, ultra-fast ~1s)
@@ -18,9 +20,10 @@ Return ONLY valid JSON matching this exact structure:
   "verb": {
     "infinitive": "lowercase French infinitive (include 'se ' or 's\\'' if input was reflexive)",
     "meaning": "concise English meaning(s)",
-    "group": "e.g. '1st group · Regular -er' or '3rd group · Irregular -ir'",
+    "group": "e.g. '1st group · Regular -er' or '3rd group · Irregular -ir' or '1st group · Reflexive -er'",
     "isIrregular": true,
     "isReflexive": false,
+    "isImpersonal": false,
     "auxiliary": "avoir or être",
     "pastParticiple": "past participle",
     "duolingoContext": {
@@ -57,7 +60,8 @@ Return ONLY valid JSON matching this exact structure:
 Important formatting rules:
 1. If the user types a non-French word, an English word like "banana", gibberish, or a French noun/adjective with no verb, set "isValidFrenchVerb": false and "verb": null!
 2. In "tenses", append an asterisk * at the end of forms that have irregular stems, stem-changes, or être agreement (e.g. "nous buvons*") so the UI highlights them.
-3. For impersonal verbs like falloir or pleuvoir, use "—" for unused persons and only fill index 2 ("il faut*").
+3. For impersonal verbs like falloir, pleuvoir, neiger, or s'agir, set "isImpersonal": true, use "—" for unused persons, and only fill index 2 ("il faut*").
+4. Any reflexive verb (starting with "se " or "s'") MUST have "isReflexive": true and "auxiliary": "être".
 `;
 
 function extractJsonFromGeminiData(data) {
@@ -175,7 +179,7 @@ ${VERB_ENTRY_SCHEMA_PROMPT}`;
   }
   return {
     ok: true,
-    verb: result.verb,
+    verb: normalizeVerbEntry(result.verb),
     detectedFrom: result.detectedFrom || null
   };
 }

@@ -66,7 +66,7 @@ function buildFromSpec(infinitive, spec) {
       impStem = nousStem;
       futStem = base;
       pp = stem + "é";
-      group = group || (isReflexive ? "Reflexive -er (1st group)" : "Regular -er (1st group)");
+      group = group || (isReflexive ? "1st group · Reflexive -er" : "1st group · Regular -er");
     } else if (base.endsWith("ir")) {
       const stem = base.slice(0, -2);
       presForms = [stem + "is", stem + "is", stem + "it", stem + "issons", stem + "issez", stem + "issent"];
@@ -74,14 +74,14 @@ function buildFromSpec(infinitive, spec) {
       impStem = stem + "iss";
       futStem = base;
       pp = stem + "i";
-      group = group || "Regular -ir (2nd group)";
+      group = group || (isReflexive ? "2nd group · Reflexive -ir" : "2nd group · Regular -ir");
     } else if (base.endsWith("re")) {
       const stem = base.slice(0, -2);
       presForms = [stem + "s", stem + "s", stem, stem + "ons", stem + "ez", stem + "ent"];
       impStem = stem;
       futStem = base.slice(0, -1);
       pp = stem + "u";
-      group = group || "Regular -re (3rd group)";
+      group = group || (isReflexive ? "3rd group · Reflexive -re" : "3rd group · Regular -re");
     }
   }
 
@@ -959,3 +959,163 @@ export function extractOfflineVerbsFromText(text) {
   }
   return found;
 }
+
+// ==========================================================================
+// Grammatical Guardrails & Reflexive / Chameleon Counterpart Detection
+// ==========================================================================
+
+export const PURE_ETRE_VERBS = new Set([
+  "aller", "venir", "devenir", "revenir", "parvenir", "intervenir", "survenir",
+  "arriver", "partir", "repartir", "entrer", "naître", "mourir", "décéder",
+  "tomber", "retomber", "rester"
+]);
+
+export const DUAL_AUX_VERBS = new Set([
+  "passer", "monter", "descendre", "sortir", "rentrer", "retourner"
+]);
+
+export const IMPERSONAL_VERBS = new Set([
+  "falloir", "pleuvoir", "neiger", "grêler", "geler", "venter", "tonner",
+  "s'agir", "y avoir"
+]);
+
+const ALWAYS_REFLEXIVE_VERBS = new Set([
+  "se souvenir", "s'agenouiller", "se méfier", "se moquer", "se suicider",
+  "s'évanouir", "se taire", "s'agir", "se blottir", "se démener",
+  "s'emparer", "s'enfuir", "s'envoler", "se repentir", "s'efforcer"
+]);
+
+const REFLEXIVE_TWINS = {
+  "réveiller": "se réveiller",
+  "coucher": "se coucher",
+  "habiller": "s'habiller",
+  "laver": "se laver",
+  "brosser": "se brosser",
+  "préparer": "se préparer",
+  "promener": "se promener",
+  "lever": "se lever",
+  "appeler": "s'appeler",
+  "reposer": "se reposer",
+  "dépêcher": "se dépêcher",
+  "tromper": "se tromper",
+  "rappeler": "se rappeler",
+  "passer": "se passer",
+  "demander": "se demander",
+  "trouver": "se trouver",
+  "entendre": "s'entendre",
+  "ennuyer": "s'ennuyer",
+  "arrêter": "s'arrêter",
+  "sentir": "se sentir",
+  "asseoir": "s'asseoir",
+  "baigner": "se baigner",
+  "blesser": "se blesser",
+  "calmer": "se calmer",
+  "changer": "se changer",
+  "coiffer": "se coiffer",
+  "conduire": "se conduire",
+  "connecter": "se connecter",
+  "déplacer": "se déplacer",
+  "détendre": "se détendre",
+  "endormir": "s'endormir",
+  "énerver": "s'énerver",
+  "excuser": "s'excuser",
+  "fâcher": "se fâcher",
+  "faire": "se faire",
+  "inquiéter": "s'inquiéter",
+  "installer": "s'installer",
+  "marier": "se marier",
+  "maquiller": "se maquiller",
+  "mettre": "se mettre",
+  "occuper": "s'occuper",
+  "perdre": "se perdre",
+  "plaindre": "se plaindre",
+  "rendre": "se rendre",
+  "retrouver": "se retrouver",
+  "servir": "se servir",
+  "voir": "se voir"
+};
+
+export function getReflexiveCounterpart(infinitive) {
+  const inf = String(infinitive || "").toLowerCase().replace(/’/g, "'").trim();
+  if (!inf) return null;
+
+  // If currently reflexive -> suggest non-reflexive base (unless always-reflexive)
+  if (inf.startsWith("se ") || inf.startsWith("s'")) {
+    if (ALWAYS_REFLEXIVE_VERBS.has(inf)) return null;
+    const base = inf.startsWith("se ") ? inf.slice(3).trim() : inf.slice(2).trim();
+    if (!base || IMPERSONAL_VERBS.has(inf)) return null;
+    return base;
+  }
+
+  // If non-reflexive -> return known reflexive twin if one exists
+  if (REFLEXIVE_TWINS[inf]) {
+    return REFLEXIVE_TWINS[inf];
+  }
+  return null;
+}
+
+const GROUP_LABEL_MAP = {
+  "Regular -er (1st group)": "1st group · Regular -er",
+  "Reflexive -er (1st group)": "1st group · Reflexive -er",
+  "Regular -ir (2nd group)": "2nd group · Regular -ir",
+  "Regular -re (3rd group)": "3rd group · Regular -re"
+};
+
+export function normalizeVerbEntry(rawVerb) {
+  if (!rawVerb || typeof rawVerb !== "object") return rawVerb;
+  const v = { ...rawVerb };
+
+  let inf = String(v.infinitive || "").toLowerCase().replace(/’/g, "'").trim();
+  const startsWithRefl = inf.startsWith("se ") || inf.startsWith("s'");
+
+  // 1. Reflexive guardrail: any verb starting with se/s' (or flagged isReflexive) MUST be reflexive + aux. être
+  v.isReflexive = Boolean(v.isReflexive || startsWithRefl);
+  if (v.isReflexive && !startsWithRefl && inf) {
+    inf = VOWEL_RE.test(inf) ? `s'${inf}` : `se ${inf}`;
+  }
+  v.infinitive = inf;
+
+  // 2. Impersonal guardrail: known impersonals OR 5-dash conjugation pattern (only il form filled)
+  const pres = Array.isArray(v.tenses?.present) ? v.tenses.present : null;
+  const hasOnlyIlForm = Boolean(
+    pres &&
+    pres.length === 6 &&
+    [0, 1, 3, 4, 5].every((idx) => !pres[idx] || String(pres[idx]).trim().startsWith("—")) &&
+    pres[2] && !String(pres[2]).trim().startsWith("—")
+  );
+  v.isImpersonal = Boolean(v.isImpersonal || IMPERSONAL_VERBS.has(inf) || hasOnlyIlForm);
+
+  // 3. Auxiliary guardrail:
+  //    - All reflexive verbs strictly take "être"
+  //    - Pure Vandertramp verbs strictly take "être"
+  //    - Otherwise normalize to "être" or "avoir"
+  if (v.isReflexive || PURE_ETRE_VERBS.has(inf)) {
+    v.auxiliary = "être";
+  } else {
+    const auxLower = String(v.auxiliary || "").toLowerCase().trim();
+    v.auxiliary = auxLower === "être" || auxLower === "etre" ? "être" : "avoir";
+  }
+
+  // 4. Dual-auxiliary ("chameleon") guardrail: ensure learner is warned if verb can take both être and avoir
+  if (!v.isReflexive && DUAL_AUX_VERBS.has(inf)) {
+    v.isDualAux = true;
+    const note = String(v.duolingoTips?.auxiliaryNote || "");
+    if (!note.toLowerCase().includes("avoir") || !note.toLowerCase().includes("être")) {
+      v.duolingoTips = {
+        ...v.duolingoTips,
+        auxiliaryNote: note
+          ? `${note} (Note: uses être for movement, avoir with a direct object.)`
+          : "Dual-auxiliary verb: uses être for movement/intransitive use, and avoir when followed by a direct object."
+      };
+    }
+  }
+
+  // 5. Irregular boolean & uniform group badge formatting
+  v.isIrregular = Boolean(v.isIrregular);
+  if (v.group && GROUP_LABEL_MAP[v.group]) {
+    v.group = GROUP_LABEL_MAP[v.group];
+  }
+
+  return v;
+}
+

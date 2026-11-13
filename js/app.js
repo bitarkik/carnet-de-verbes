@@ -2,16 +2,22 @@
 // Carnet de Verbes — Clean Accordion Notebook Controller (Muse-Inspired)
 // ==========================================================================
 
-import { lookupOfflineVerb, extractOfflineVerbsFromText, stripAccents } from "./french-engine.js?v=18";
+import {
+  lookupOfflineVerb,
+  extractOfflineVerbsFromText,
+  stripAccents,
+  normalizeVerbEntry,
+  getReflexiveCounterpart
+} from "./french-engine.js?v=19";
 import {
   testGeminiKey,
   lookupVerbWithAI,
   extractVerbsFromScreenshots,
   extractVerbsFromWordTextWithAI
-} from "./ai.js?v=18";
-import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=18";
-import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=18";
-import { createPracticeController } from "./practice.js?v=18";
+} from "./ai.js?v=19";
+import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=19";
+import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=19";
+import { createPracticeController } from "./practice.js?v=19";
 
 const TENSES = [
   { key: "present", label: "Présent" },
@@ -27,6 +33,7 @@ const $ = (id) => document.getElementById(id);
 
 // ---------- State ----------
 let { verbs, tombstones } = loadLocalState();
+verbs = verbs.map(normalizeVerbEntry);
 let settings = loadSettings();
 let openVerbId = verbs[0]?.infinitive || null;
 let activeTenseMap = {};
@@ -152,7 +159,8 @@ function showNotebookView() {
 }
 
 // ---------- Verb CRUD ----------
-function upsertVerb(verbObj, { select = true } = {}) {
+function upsertVerb(rawVerbObj, { select = true } = {}) {
+  const verbObj = normalizeVerbEntry(rawVerbObj);
   const now = Date.now();
   const infKey = verbObj.infinitive.toLowerCase().trim();
   delete tombstones[infKey];
@@ -436,7 +444,16 @@ function render() {
         })
         .join("");
 
-        const isImpersonal = v.isImpersonal || ["falloir", "pleuvoir", "neiger"].includes(v.infinitive.toLowerCase());
+        const isImpersonal = Boolean(v.isImpersonal);
+        const counterpart = getReflexiveCounterpart(v.infinitive);
+        const hasCounterpartSaved = counterpart
+          ? verbs.some((item) => item.infinitive.toLowerCase() === counterpart)
+          : false;
+        const auxLabel = v.isDualAux
+          ? "aux. être / avoir"
+          : v.auxiliary === "être"
+            ? "aux. être"
+            : "aux. avoir";
 
         return `
         <article class="card ${isOpen ? "open" : ""}" data-card-inf="${esc(v.infinitive)}">
@@ -450,7 +467,7 @@ function render() {
               <div class="badges">
                 ${isImpersonal ? `<span class="badge badge-purple">impersonal</span>` : ""}
                 ${!isImpersonal && v.isIrregular ? `<span class="badge badge-irreg">${esc(v.group)}</span>` : !isImpersonal ? `<span class="badge">${esc(v.group)}</span>` : ""}
-                <span class="badge ${v.auxiliary === "être" ? "badge-etre" : ""}">${v.auxiliary === "être" ? "aux. être" : "aux. avoir"}</span>
+                <span class="badge ${v.auxiliary === "être" ? "badge-etre" : ""}">${auxLabel}</span>
                 ${v.isReflexive ? `<span class="badge badge-emerald">reflexive</span>` : ""}
               </div>
             </div>
@@ -517,7 +534,12 @@ function render() {
             </div>
 
             <!-- Card Actions -->
-            <div class="card-actions-row" style="justify-content: flex-end;">
+            <div class="card-actions-row" style="${counterpart ? "justify-content: space-between;" : "justify-content: flex-end;"}">
+              ${counterpart ? `
+                <button type="button" class="counterpart-btn" data-counterpart="${esc(counterpart)}">
+                  ${hasCounterpartSaved ? `🔗 Open ${esc(counterpart)}` : `🔗 + Add ${esc(counterpart)}`}
+                </button>
+              ` : ""}
               <button type="button" class="danger-btn" data-del="${esc(v.infinitive)}">Delete verb</button>
             </div>
           </div>
@@ -562,6 +584,14 @@ function render() {
         target.updatedAt = Date.now();
         persistAndScheduleSync();
       }
+    });
+  });
+
+  // Bind 1-tap reflexive counterpart button
+  container.querySelectorAll("[data-counterpart]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      handleAddVerb(btn.dataset.counterpart);
     });
   });
 
@@ -973,7 +1003,7 @@ function init() {
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register("./sw.js?v=18")
+        .register("./sw.js?v=19")
         .then((reg) => {
           reg.update().catch(() => {});
           // Listen for updates and automatically refresh if new version found

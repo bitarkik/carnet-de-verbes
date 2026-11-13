@@ -799,6 +799,27 @@ textarea:focus {
   border-top: 1px solid var(--line-table);
 }
 
+.counterpart-btn {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent-soft-fg);
+  border: 1.5px solid var(--accent-border);
+  background: var(--accent-soft);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: transform 0.1s ease, opacity 0.15s ease;
+}
+
+.counterpart-btn:hover {
+  opacity: 0.9;
+}
+
+.counterpart-btn:active {
+  transform: scale(0.98);
+}
+
 .danger-btn {
   font-family: var(--font-sans);
   font-size: 13px;
