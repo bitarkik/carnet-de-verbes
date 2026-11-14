@@ -485,12 +485,10 @@ const SPECS = {
     ex: ["Il peint un paysage à l'aquarelle.", "He is painting a watercolor landscape."],
     ex2: ["Elle a peint les murs en blanc.", "She painted the walls white."]
   },
-  "souvenir": {
-    m: "to remember (se souvenir de)", irreg: true, aux: "être", group: "Reflexive Irregular -ir", pp: "souvenu",
-    pres: ["me souviens", "te souviens", "se souvient", "nous souvenons", "vous souvenez", "se souviennent"], impStem: "souven", futStem: "souviendr", futMark: true,
-    tipPrep: "Always pronominal with DE: se souvenir de qqch (Je me souviens de ce voyage)!",
-    ex: ["Je me souviens très bien de cette soirée.", "I remember that evening very well."]
-  },
+  // NOTE: no bare "souvenir" entry — it only exists as "se souvenir" above.
+  // A bare entry with pronouns baked into its present forms ("me souviens"...)
+  // produced wrong forms in every other tense ("je suis souvenu", "je souvenais").
+  // Stem specs must always list bare forms; the engine adds me/te/se.
   // Stem-changing -er & Reflexive Duolingo Favorites
   "lever": {
     m: "to lift / to raise / get up", irreg: false, group: "Stem-changing -er", pp: "levé",
@@ -638,13 +636,13 @@ const SPECS = {
     m: "to wake (someone) up", tipExtra: "With 'se' (se réveiller), it means to wake up on your own!", ex: ["Le bruit a réveillé tout le monde.", "The noise woke everyone up."]
   },
   "se brosser": {
-    m: "to brush (one's teeth / hair)", ex: ["Je me brosse les dents matin et soir.", "I brush my teeth morning and night."]
+    m: "to brush (one's teeth / hair)", tipExtra: "Agreement: Elle s'est brossée (alone) but Elle s'est brossé les dents — no agreement when a body part follows.", ex: ["Je me brosse les dents matin et soir.", "I brush my teeth morning and night."]
   },
   "brosser": {
     m: "to brush (one's teeth / hair)", tipExtra: "With body parts in French, use reflexive se brosser + definite article (Je me brosse les dents)!", ex: ["Elle se brosse les cheveux devant le miroir.", "She brushes her hair in front of the mirror."]
   },
   "se laver": {
-    m: "to wash up / wash oneself", ex: ["Il se lave les mains avant le repas.", "He washes his hands before the meal."]
+    m: "to wash up / wash oneself", tipExtra: "Agreement: Elle s'est lavée (alone) but Elle s'est lavé les mains — no agreement when a body part follows.", ex: ["Il se lave les mains avant le repas.", "He washes his hands before the meal."]
   },
   "laver": {
     m: "to wash", ex: ["Nous lavons la voiture le samedi.", "We wash the car on Saturdays."]
@@ -995,8 +993,10 @@ const REFLEXIVE_TWINS = {
   "promener": "se promener",
   "lever": "se lever",
   "appeler": "s'appeler",
-  "reposer": "se reposer",
-  "dépêcher": "se dépêcher",
+  // NOTE: no "reposer" / "dépêcher" twins here. Their bare forms are rarely
+  // used on their own, so offering them as a switch just led offline to a
+  // dead end ("connect Gemini to load reposer"). "se reposer" and
+  // "se dépêcher" still work on their own; type the bare verb to add it.
   "tromper": "se tromper",
   "rappeler": "se rappeler",
   "passer": "se passer",
@@ -1044,6 +1044,12 @@ export function getReflexiveCounterpart(infinitive) {
     if (ALWAYS_REFLEXIVE_VERBS.has(inf)) return null;
     const base = inf.startsWith("se ") ? inf.slice(3).trim() : inf.slice(2).trim();
     if (!base || IMPERSONAL_VERBS.has(inf)) return null;
+    // Only offer a twin we actually know: a listed twin, or a base verb already
+    // in the offline pack. Otherwise an AI-added verb like "se téléphoner"
+    // would offer a twin we have never verified, and the switch would either
+    // invent it via Gemini or fail offline. To add a new twin, add it to
+    // REFLEXIVE_TWINS above.
+    if (!REFLEXIVE_TWINS[base] && !OFFLINE_DICTIONARY[base]) return null;
     return base;
   }
 

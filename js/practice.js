@@ -24,13 +24,18 @@ export function createPracticeController({ getVerbs, speakFrench, onSwitchToNote
   function ensureQuizSpec(v) {
     if (v.quiz && v.quiz.sentence && v.quiz.answer) return v.quiz;
     const pp = v.pastParticiple || v.infinitive;
+    // Reflexive verbs need their reflexive pronoun before the auxiliary:
+    // "Hier, nous nous sommes ____ (se lever)", not "nous sommes ____".
+    const refl = v.isReflexive ? "nous " : "";
     return {
       tense: "Passé Composé",
-      sentence: `Hier, nous ${v.auxiliary === "être" ? "sommes" : "avons"} ____ (${v.infinitive}).`,
+      sentence: `Hier, nous ${refl}${v.auxiliary === "être" ? "sommes" : "avons"} ____ (${v.infinitive}).`,
       en: `Practice the past participle of ${v.infinitive} (${v.meaning}).`,
       answer: pp,
-      altAnswers: [pp + "s"],
-      explanation: `The past participle of ${v.infinitive} is ${pp}.`
+      altAnswers: [pp + "s", pp + "e", pp + "es"],
+      explanation: v.isReflexive
+        ? `The past participle of ${v.infinitive} is ${pp} (with être: nous nous sommes ${pp}).`
+        : `The past participle of ${v.infinitive} is ${pp}.`
     };
   }
 
