@@ -8,16 +8,16 @@ import {
   stripAccents,
   normalizeVerbEntry,
   getReflexiveCounterpart
-} from "./french-engine.js?v=22";
+} from "./french-engine.js?v=23";
 import {
   testGeminiKey,
   lookupVerbWithAI,
   extractVerbsFromScreenshots,
   extractVerbsFromWordTextWithAI
-} from "./ai.js?v=22";
-import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=22";
-import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=22";
-import { createPracticeController } from "./practice.js?v=22";
+} from "./ai.js?v=23";
+import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=23";
+import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=23";
+import { createPracticeController } from "./practice.js?v=23";
 
 const TENSES = [
   { key: "present", label: "Présent" },
@@ -1110,7 +1110,7 @@ function init() {
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register("./sw.js?v=22")
+        .register("./sw.js?v=23")
         .then((reg) => {
           reg.update().catch(() => {});
           // Listen for updates and automatically refresh if new version found

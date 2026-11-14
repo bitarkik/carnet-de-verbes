@@ -785,6 +785,89 @@ for (const [inf, spec] of Object.entries(SPECS)) {
   }
 }
 
+// English meanings (and examples) for reflexive twins whose reflexive form is
+// NOT itself in the offline pack. The base verb's meaning is often different
+// ("passer" = to spend/pass, but "se passer" = to happen), so a reflexive
+// entry built from the base verb must NOT inherit the base meaning.
+const REFLEXIVE_INFO = {
+  "se passer": { m: "to happen / to do without", tipPrep: "se passer de qqch = to do without something.", ex: ["Ça s'est bien passé.", "It went well."] },
+  "se rendre": { m: "to go (to a place) / to surrender", tipPrep: "se rendre à + place (Je me rends au travail).", ex: ["Je me rends au travail à huit heures.", "I go to work at eight o'clock."] },
+  "se demander": { m: "to wonder", ex: ["Je me demande pourquoi.", "I wonder why."] },
+  "se trouver": { m: "to be located / to find oneself", ex: ["Où se trouve la gare ?", "Where is the train station?"] },
+  "s'entendre": { m: "to get along (with each other)", ex: ["Ils s'entendent très bien.", "They get along very well."] },
+  "se sentir": { m: "to feel (well / ill)", ex: ["Je me sens fatigué.", "I feel tired."] },
+  "se tromper": { m: "to be mistaken", ex: ["Je me suis trompé de numéro.", "I dialled the wrong number."] },
+  "se rappeler": { m: "to remember", tipPrep: "No 'de': Je me rappelle son nom.", ex: ["Je me rappelle son nom.", "I remember his name."] },
+  "se faire": { m: "to get (something) done", ex: ["Je me fais couper les cheveux.", "I'm getting my hair cut."] },
+  "se voir": { m: "to see each other / to meet", ex: ["On se voit demain ?", "Shall we see each other tomorrow?"] },
+  "se servir": { m: "to help oneself / to use", ex: ["Servez-vous, je vous en prie.", "Help yourself, please."] },
+  "se mettre": { m: "to put oneself / to start", tipPrep: "se mettre à + infinitive = to start doing something.", ex: ["Je me mets au travail.", "I'm getting down to work."] },
+  "se perdre": { m: "to get lost", ex: ["Je me suis perdu dans la ville.", "I got lost in the city."] },
+  "se plaindre": { m: "to complain", tipPrep: "se plaindre de qqch.", ex: ["Il se plaint du bruit.", "He complains about the noise."] },
+  "se retrouver": { m: "to meet up / to find oneself", ex: ["On se retrouve au café ?", "Shall we meet at the café?"] },
+  "se marier": { m: "to get married", ex: ["Ils se marient en juin.", "They're getting married in June."] },
+  "s'inquiéter": { m: "to worry", ex: ["Ne t'inquiète pas.", "Don't worry."] },
+  "s'occuper": { m: "to take care of / to look after", tipPrep: "s'occuper de qqch / qqn.", ex: ["Je m'occupe des enfants.", "I'm looking after the children."] },
+  "se baigner": { m: "to go swimming / to bathe", ex: ["On se baigne dans le lac.", "We swim in the lake."] },
+  "se blesser": { m: "to hurt oneself", ex: ["Il s'est blessé au genou.", "He hurt his knee."] },
+  "se calmer": { m: "to calm down", ex: ["Calme-toi !", "Calm down!"] },
+  "se changer": { m: "to get changed", ex: ["Je me change avant de sortir.", "I get changed before going out."] },
+  "se coiffer": { m: "to do one's hair", ex: ["Elle se coiffe devant le miroir.", "She does her hair in front of the mirror."] },
+  "se conduire": { m: "to behave", ex: ["Conduis-toi bien.", "Behave yourself."] },
+  "se connecter": { m: "to log in / connect", ex: ["Je me connecte à mon compte.", "I log in to my account."] },
+  "se déplacer": { m: "to move around / to travel", ex: ["Je me déplace en vélo.", "I get around by bike."] },
+  "se détendre": { m: "to relax", ex: ["Je me détends après le travail.", "I relax after work."] },
+  "s'endormir": { m: "to fall asleep", ex: ["Je m'endors vite.", "I fall asleep quickly."] },
+  "s'énerver": { m: "to get angry / annoyed", ex: ["Il s'énerve facilement.", "He gets annoyed easily."] },
+  "s'excuser": { m: "to apologise", ex: ["Excusez-moi.", "Excuse me. / I'm sorry."] },
+  "se fâcher": { m: "to get angry", ex: ["Ne te fâche pas.", "Don't get angry."] },
+  "s'installer": { m: "to settle in / to sit down", ex: ["Installez-vous.", "Make yourselves comfortable."] },
+  "se maquiller": { m: "to put on makeup", ex: ["Elle se maquille le matin.", "She puts on makeup in the morning."] },
+  "s'ennuyer": { m: "to be bored", ex: ["Je m'ennuie.", "I'm bored."] },
+  "s'arrêter": { m: "to stop (oneself)", ex: ["Arrêtez-vous ici.", "Stop here."] }
+};
+
+// Build a correct reflexive entry from a base verb already in the offline pack.
+// Uses the base verb's stems / past participle, but adds the reflexive
+// pronouns in every tense, forces être, and uses the reflexive meaning above
+// (never the base verb's meaning). Returns null if the base isn't offline.
+function buildReflexiveFromBase(reflexiveInf) {
+  const inf = String(reflexiveInf || "").toLowerCase().replace(/’/g, "'").trim();
+  const base = inf.startsWith("se ") ? inf.slice(3).trim() : inf.startsWith("s'") ? inf.slice(2).trim() : null;
+  if (!base) return null;
+  const info = REFLEXIVE_INFO[inf] || {};
+  // Base verb not in the offline pack (e.g. "tromper", "baigner"): if we know
+  // the reflexive meaning AND the base is a regular -er verb, the engine can
+  // generate it safely from scratch. Never do this for -ir / -re bases —
+  // their "regular" patterns are often wrong (e.g. "s'endormir" is NOT
+  // -issons like a regular -ir verb), so those still need Gemini.
+  if (!SPECS[base]) {
+    if (!info.m || !base.endsWith("er")) return null;
+    return buildFromSpec(inf, {
+      m: info.m,
+      ex: info.ex || [`Je pratique le verbe « ${inf} ».`, `Meaning: ${info.m}.`],
+      tipPrep: info.tipPrep,
+      tipExtra: info.tipExtra
+    });
+  }
+  const baseSpec = SPECS[base];
+  const spec = {
+    ...baseSpec,
+    m: info.m || baseSpec.m,
+    ex: info.ex || baseSpec.ex,
+    ex2: info.ex2 || baseSpec.ex2,
+    // Base-verb tips are about the non-reflexive verb (e.g. "faire du sport",
+    // "rendre visite à qqn", dual-aux notes for passer/sortir). Drop them so
+    // buildFromSpec falls back to the reflexive defaults (être + pronoun note),
+    // unless this reflexive form has its own preposition tip.
+    tipPrep: info.tipPrep,
+    tipAux: undefined,
+    tipExtra: info.tipExtra,
+    tipHomo: baseSpec.tipHomo
+  };
+  return buildFromSpec(inf, spec);
+}
+
 export function lookupOfflineVerb(rawInput) {
   const cleaned = rawInput
     .toLowerCase()
@@ -823,6 +906,50 @@ export function lookupOfflineVerb(rawInput) {
       verb: structuredClone(OFFLINE_DICTIONARY[inf]),
       detectedFrom: inf !== rawInput.trim() ? rawInput.trim() : null
     };
+  }
+
+  // 2c. Reflexive infinitive ("se passer", "se rendre", "s'entendre").
+  // These are usually NOT in the offline pack, so the scan below would find
+  // the bare base verb ("passer", "rendre") and silently drop the "se" —
+  // returning a non-reflexive card with avoir and no pronouns. Build the
+  // reflexive entry instead; if the base isn't offline either, do NOT fall
+  // through to it — let the AI fallback handle it (or say so honestly).
+  if (cleaned.startsWith("se ") || cleaned.startsWith("s'")) {
+    const built = buildReflexiveFromBase(cleaned);
+    if (built) {
+      return { ok: true, verb: built, detectedFrom: null };
+    }
+    return {
+      ok: false,
+      needsAI: true,
+      reason: `“${rawInput.trim()}” isn't in the offline starter pack yet — connect your free Gemini API key in Settings to generate it!`
+    };
+  }
+
+  // 2d. Reflexive conjugated phrase ("je me rends", "tu te sens",
+  // "il s'est passé", "je me suis rendu"). Resolve the bare verb form,
+  // then build the reflexive entry from it.
+  const reflMatch = cleaned.match(/^(je|tu|il|elle|on|nous|vous|ils|elles)\s+(me|te|se|nous|vous|m'|t'|s')\s*(.*)$/);
+  if (reflMatch) {
+    const restWords = reflMatch[3].trim().split(" ").filter(Boolean);
+    const AUX_FORMS = new Set(["suis", "es", "est", "sommes", "êtes", "sont"]);
+    let verbToken = restWords[0] || "";
+    if (AUX_FORMS.has(verbToken) && restWords[1]) verbToken = restWords[1];
+    let baseInf = null;
+    if (verbToken && OFFLINE_DICTIONARY[verbToken]) baseInf = verbToken;
+    else if (verbToken && CONJUGATED_INDEX[verbToken]) baseInf = CONJUGATED_INDEX[verbToken];
+    else if (verbToken && UNACCENTED_INDEX[stripAccents(verbToken)]) baseInf = UNACCENTED_INDEX[stripAccents(verbToken)];
+    if (baseInf) {
+      const reflInf = VOWEL_RE.test(baseInf) ? `s'${baseInf}` : `se ${baseInf}`;
+      if (OFFLINE_DICTIONARY[reflInf]) {
+        return { ok: true, verb: structuredClone(OFFLINE_DICTIONARY[reflInf]), detectedFrom: rawInput.trim() };
+      }
+      const built = buildReflexiveFromBase(reflInf);
+      if (built) {
+        return { ok: true, verb: built, detectedFrom: rawInput.trim() };
+      }
+    }
+    // No base found: fall through to the normal scan below.
   }
 
   // 3. Scan 3-word, 2-word, and 1-word tokens inside a Duolingo phrase (e.g. "nous avons pris le train")
@@ -944,11 +1071,30 @@ export function extractOfflineVerbsFromText(text) {
       // 1. Direct segment match (e.g. "prendre" or "se lever" or "s'appeler")
       if (addIfKnown(cleaned)) continue;
 
+      // 1b. Reflexive twin not in the pack (e.g. "se passer", "se rendre"):
+      // build it from the base verb instead of dropping the "se".
+      if ((cleaned.startsWith("se ") || cleaned.startsWith("s'")) && !seen.has(cleaned)) {
+        const built = buildReflexiveFromBase(cleaned);
+        if (built) {
+          seen.add(cleaned);
+          found.push(built);
+          continue;
+        }
+      }
+
       const words = cleaned.split(" ");
       // 2. Reflexive 2-word prefix (e.g. "se lever to get up")
       if (words.length >= 2) {
         const firstTwo = `${words[0]} ${words[1]}`;
         if (addIfKnown(firstTwo)) continue;
+        if ((firstTwo.startsWith("se ") || firstTwo.startsWith("s'")) && !seen.has(firstTwo)) {
+          const built = buildReflexiveFromBase(firstTwo);
+          if (built) {
+            seen.add(firstTwo);
+            found.push(built);
+            continue;
+          }
+        }
       }
 
       // 3. First word match (e.g. "prendre to take" or "s'appeler")
