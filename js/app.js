@@ -8,16 +8,16 @@ import {
   stripAccents,
   normalizeVerbEntry,
   getReflexiveCounterpart
-} from "./french-engine.js?v=23";
+} from "./french-engine.js?v=24";
 import {
   testGeminiKey,
   lookupVerbWithAI,
   extractVerbsFromScreenshots,
   extractVerbsFromWordTextWithAI
-} from "./ai.js?v=23";
-import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=23";
-import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=23";
-import { createPracticeController } from "./practice.js?v=23";
+} from "./ai.js?v=24";
+import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=24";
+import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=24";
+import { createPracticeController } from "./practice.js?v=24";
 
 const TENSES = [
   { key: "present", label: "Présent" },
@@ -360,7 +360,18 @@ function getFilteredVerbs() {
   const filtered = verbs.filter((v) => {
     if (activeFilter === "etre" && v.auxiliary !== "être") return false;
     if (activeFilter === "irregular" && !v.isIrregular) return false;
-    if (activeFilter === "reflexive" && !v.isReflexive) return false;
+    // Reflexive pill: a card counts as reflexive if the saved verb itself is
+    // reflexive, if its cached counterpart is, OR if it has a reflexive twin
+    // at all ("passer" -> "se passer", "rendre" -> "se rendre"). Previously
+    // only the first case counted, so every base verb with a reflexive twin
+    // was hidden by this pill — including "passer" and "rendre", whose
+    // reflexive forms are only reachable through the in-card switch.
+    if (
+      activeFilter === "reflexive" &&
+      !v.isReflexive &&
+      !(v.counterpartData && v.counterpartData.isReflexive) &&
+      !getReflexiveCounterpart(v.infinitive)
+    ) return false;
     if (activeFilter === "impersonal" && !v.isImpersonal && !["falloir", "pleuvoir", "neiger"].includes(v.infinitive.toLowerCase())) return false;
 
     if (!q) return true;
@@ -507,10 +518,25 @@ function render() {
       const isOpen = v.infinitive === openVerbId;
       const counterpart = getReflexiveCounterpart(v.infinitive);
       const activeVar = activeVariantMap[v.infinitive];
-      const isCounterpartActive = Boolean(
-        counterpart && activeVar === counterpart && v.counterpartData
+      // A cached counterpart is only valid if it is actually the counterpart
+      // (an earlier bug cached the base verb itself as "se passer" / "se rendre").
+      const hasValidCounterpart = Boolean(
+        counterpart && v.counterpartData &&
+        v.counterpartData.infinitive.toLowerCase() === counterpart.toLowerCase()
       );
-      const displayVerb = isCounterpartActive ? v.counterpartData : v;
+      const isCounterpartActive = Boolean(
+        counterpart && activeVar === counterpart && hasValidCounterpart
+      );
+      // Under the reflexive pill, a base verb shows its reflexive variant by
+      // default (e.g. "passer" shows "se passer"), without changing the
+      // user's saved variant choice — leaving the pill goes back to it.
+      const showReflexiveVariant =
+        activeFilter === "reflexive" &&
+        !v.isReflexive &&
+        hasValidCounterpart &&
+        v.counterpartData.isReflexive;
+      const displayVerb = isCounterpartActive || showReflexiveVariant ? v.counterpartData : v;
+      const showingCounterpart = isCounterpartActive || showReflexiveVariant;
 
       const currentTense = activeTenseMap[v.infinitive] || "present";
       const forms = displayVerb.tenses?.[currentTense] || displayVerb.tenses?.present || [];
@@ -574,13 +600,13 @@ function render() {
               <div class="variant-switch" role="group" aria-label="Switch between normal and reflexive form">
                 <button
                   type="button"
-                  class="variant-btn ${!isCounterpartActive ? "on" : ""}"
+                  class="variant-btn ${!showingCounterpart ? "on" : ""}"
                   data-variant-for="${esc(v.infinitive)}"
                   data-variant-target="${esc(v.infinitive)}"
                 >${esc(v.infinitive)}</button>
                 <button
                   type="button"
-                  class="variant-btn ${isCounterpartActive ? "on" : ""}"
+                  class="variant-btn ${showingCounterpart ? "on" : ""}"
                   data-variant-for="${esc(v.infinitive)}"
                   data-variant-target="${esc(counterpart)}"
                 >${esc(counterpart)}</button>
@@ -990,6 +1016,32 @@ function init() {
   document.querySelectorAll(".pill-btn[data-filter]").forEach((p) => {
     p.addEventListener("click", () => {
       activeFilter = p.dataset.filter;
+      // Reflexive pill: preload each base verb's reflexive twin offline, so
+      // the card can actually show "se passer" / "se rendre" instead of the
+      // base verb. Only offline lookups — a twin that needs Gemini is left
+      // alone here (tapping its switch still offers that, without spamming
+      // a "connect a key" toast for every card at once). Also repairs stale
+      // cached counterparts from the old bug, where the base verb itself was
+      // cached as its own "se ..." twin.
+      if (activeFilter === "reflexive") {
+        let changed = false;
+        for (const v of verbs) {
+          if (v.isReflexive) continue;
+          const cp = getReflexiveCounterpart(v.infinitive);
+          if (!cp) continue;
+          const stale =
+            v.counterpartData &&
+            (v.counterpartData.infinitive.toLowerCase() !== cp.toLowerCase() ||
+              !v.counterpartData.isReflexive);
+          if (v.counterpartData && !stale) continue;
+          const offline = lookupOfflineVerb(cp);
+          if (offline.ok) {
+            v.counterpartData = normalizeVerbEntry(offline.verb);
+            changed = true;
+          }
+        }
+        if (changed) persistAndScheduleSync();
+      }
       render();
     });
   });
@@ -1110,7 +1162,7 @@ function init() {
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register("./sw.js?v=23")
+        .register("./sw.js?v=24")
         .then((reg) => {
           reg.update().catch(() => {});
           // Listen for updates and automatically refresh if new version found
