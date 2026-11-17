@@ -1,14 +1,16 @@
-const CACHE_NAME = "carnet-de-verbes-v24";
+const CACHE_PREFIX = `carnet-de-verbes-${encodeURIComponent(self.registration.scope)}-v`;
+const CACHE_NAME = `${CACHE_PREFIX}25`;
 const CORE_ASSETS = [
   "./",
   "./index.html",
-  "./css/styles.css?v=24",
-  "./js/app.js?v=24",
-  "./js/french-engine.js?v=24",
-  "./js/ai.js?v=24",
-  "./js/word-io.js?v=24",
-  "./js/sync.js?v=24",
-  "./js/practice.js?v=24",
+  "./css/styles.css?v=25",
+  "./js/app.js?v=25",
+  "./js/french-engine.js?v=25",
+  "./js/ai.js?v=25",
+  "./js/word-io.js?v=25",
+  "./js/sync.js?v=25",
+  "./js/practice.js?v=25",
+  "./js/validation.js?v=25",
   "./assets/icon.svg",
   "./assets/icon-180.png",
   "./assets/icon-192.png",
@@ -22,7 +24,8 @@ self.addEventListener("install", (event) => {
       Promise.all(
         CORE_ASSETS.map((assetUrl) =>
           fetch(assetUrl, { cache: "no-cache" }).then((res) => {
-            if (res.ok) return cache.put(assetUrl, res);
+            if (!res.ok) throw new Error(`Failed to cache ${assetUrl}`);
+            return cache.put(assetUrl, res);
           })
         )
       )
@@ -34,7 +37,7 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+      Promise.all(keys.filter((k) => k.startsWith(CACHE_PREFIX) && k !== CACHE_NAME).map((k) => caches.delete(k)))
     )
   );
   self.clients.claim();
@@ -45,13 +48,16 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
 
-  event.respondWith(
-    fetch(event.request, { cache: "no-cache" })
-      .then((res) => {
-        const clone = res.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-        return res;
-      })
-      .catch(() => caches.match(event.request))
-  );
+  // Versioned assets are immutable; serve cached assets immediately offline.
+  if (!url.pathname.startsWith(new URL(self.registration.scope).pathname)) return;
+  event.respondWith((async () => {
+    const cached = await caches.match(event.request);
+    if (cached) return cached;
+    const response = await fetch(event.request);
+    if (response.ok) {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.put(event.request, response.clone());
+    }
+    return response;
+  })());
 });

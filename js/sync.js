@@ -1,3 +1,4 @@
+import { validateState } from "./validation.js?v=25";
 // ==========================================================================
 // Local Auto-Save + 2-Way GitHub Gist Cloud Sync (Phone <-> Laptop)
 // ==========================================================================
@@ -10,13 +11,9 @@ export function loadLocalState() {
   try {
     const raw = localStorage.getItem(STATE_KEY);
     if (!raw) return { verbs: [], tombstones: {} };
-    const parsed = JSON.parse(raw);
-    return {
-      verbs: Array.isArray(parsed.verbs) ? parsed.verbs : [],
-      tombstones: parsed.tombstones && typeof parsed.tombstones === "object" ? parsed.tombstones : {}
-    };
-  } catch {
-    return { verbs: [], tombstones: {} };
+    return validateState(JSON.parse(raw));
+  } catch (error) {
+    throw new Error(`Stored notebook could not be read. Export your browser data before resetting it. ${error.message}`);
   }
 }
 
@@ -24,15 +21,18 @@ export function saveLocalState(verbs, tombstones = {}) {
   try {
     localStorage.setItem(STATE_KEY, JSON.stringify({ verbs, tombstones, savedAt: Date.now() }));
   } catch (err) {
-    console.warn("Could not save to localStorage (private browsing mode or quota exceeded):", err);
+    throw new Error("Notebook could not be saved on this device. Download a JSON backup now.");
   }
 }
 
 export function loadSettings() {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    const parsed = raw ? JSON.parse(raw) : {};
+    const stored = raw ? JSON.parse(raw) : {};
+    const session = JSON.parse(sessionStorage.getItem(SETTINGS_KEY) || "{}");
+    const parsed = { ...stored, ...session };
     return {
+      rememberCredentials: parsed.rememberCredentials ?? Boolean(stored.geminiKey || stored.githubToken),
       geminiKey: parsed.geminiKey || "",
       githubToken: parsed.githubToken || "",
       gistId: parsed.gistId || "",
@@ -40,20 +40,28 @@ export function loadSettings() {
       lastSyncedAt: parsed.lastSyncedAt || null
     };
   } catch {
-    return { geminiKey: "", githubToken: "", gistId: "", theme: "light", lastSyncedAt: null };
+    return { rememberCredentials: false, geminiKey: "", githubToken: "", gistId: "", theme: "light", lastSyncedAt: null };
   }
 }
 
 export function saveSettings(settings) {
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    const persisted = { ...settings };
+    if (!settings.rememberCredentials) {
+      delete persisted.geminiKey;
+      delete persisted.githubToken;
+      sessionStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    } else sessionStorage.removeItem(SETTINGS_KEY);
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(persisted));
   } catch (err) {
-    console.warn("Could not save settings to localStorage:", err);
+    throw new Error("Settings could not be saved. Check browser storage permissions.");
   }
 }
 
 // Merge local and remote verb collections cleanly using updatedAt + deletion tombstones
-function mergeNotebookStates(local, remote) {
+export function mergeNotebookStates(local, remote) {
+  local = validateState(local);
+  remote = validateState(remote);
   const mergedTombstones = { ...(remote.tombstones || {}), ...(local.tombstones || {}) };
   for (const [inf, ts] of Object.entries(remote.tombstones || {})) {
     if (!mergedTombstones[inf] || ts > mergedTombstones[inf]) mergedTombstones[inf] = ts;
@@ -65,7 +73,7 @@ function mergeNotebookStates(local, remote) {
     const key = v.infinitive.toLowerCase();
     const deletedAt = mergedTombstones[key] || 0;
     const vTime = v.updatedAt || v.addedAt || 1;
-    if (deletedAt > vTime) continue; // Verb was deleted more recently than added
+    if (deletedAt && deletedAt >= vTime) continue; // Verb was deleted more recently than added
 
     const prev = byInf.get(key);
     if (!prev || vTime >= (prev.updatedAt || prev.addedAt || 0)) {
@@ -81,6 +89,7 @@ function mergeNotebookStates(local, remote) {
 
 async function ghFetch(path, token, options = {}) {
   const res = await fetch(`https://api.github.com${path}`, {
+    signal: AbortSignal.timeout(30000),
     ...options,
     headers: {
       Accept: "application/vnd.github+json",
@@ -102,7 +111,7 @@ async function findExistingSyncGist(token) {
     const gists = await ghFetch(`/gists?per_page=100&page=${page}`, token);
     if (!Array.isArray(gists) || !gists.length) break;
     for (const g of gists) {
-      if (g.files && g.files[GIST_FILENAME]) {
+      if (!g.public && g.files && g.files[GIST_FILENAME]) {
         return g.id;
       }
     }
@@ -112,6 +121,7 @@ async function findExistingSyncGist(token) {
 }
 
 export async function syncWithGitHubGist(localState, settings) {
+  localState = validateState(localState);
   const token = (settings.githubToken || "").trim();
   if (!token) throw new Error("Missing GitHub Gist token.");
 
@@ -143,17 +153,21 @@ export async function syncWithGitHubGist(localState, settings) {
   // Pull existing Gist, merge 2-way, and push merged state back
   const gist = await ghFetch(`/gists/${gistId}`, token);
   const fileObj = gist.files?.[GIST_FILENAME];
-  let remoteState = { verbs: [], tombstones: {} };
-  if (fileObj?.content) {
-    try {
-      remoteState = JSON.parse(fileObj.content);
-    } catch {
-      remoteState = { verbs: [], tombstones: {} };
-    }
+  if (gist.public) throw new Error("Sync requires a secret Gist. Nothing was overwritten.");
+  if (!fileObj || fileObj.truncated || typeof fileObj.content !== "string") {
+    throw new Error("Remote notebook is missing or truncated. Nothing was overwritten; download a backup from GitHub.");
   }
+  let remoteState;
+  try { remoteState = validateState(JSON.parse(fileObj.content)); }
+  catch (error) { throw new Error(`Remote notebook is invalid. Nothing was overwritten. ${error.message}`); }
 
   const merged = mergeNotebookStates(localState, remoteState);
 
+  // Detect intervening remote edits; GitHub Gists do not provide an atomic merge API.
+  const latest = await ghFetch(`/gists/${gistId}`, token);
+  if (latest.files?.[GIST_FILENAME]?.content !== fileObj.content || latest.files?.[GIST_FILENAME]?.truncated) {
+    throw new Error("Notebook changed on another device. Retry sync to merge the latest changes.");
+  }
   await ghFetch(`/gists/${gistId}`, token, {
     method: "PATCH",
     body: JSON.stringify({

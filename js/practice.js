@@ -13,30 +13,33 @@ export function createPracticeController({ getVerbs, speakFrench, onSwitchToNote
   const $ = (id) => document.getElementById(id);
 
   let order = [];
+  let signature = "";
+  function shuffle(verbs) {
+    const result = verbs.map((_, i) => i);
+    for (let i = result.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [result[i], result[j]] = [result[j], result[i]];
+    }
+    return result;
+  }
 
   function ensureOrder() {
     const verbs = getVerbs();
-    if (order.length !== verbs.length) {
-      order = verbs.map((_, i) => i).sort(() => Math.random() - 0.5);
+    if (signature !== JSON.stringify(verbs.map(v => v.infinitive))) {
+      signature = JSON.stringify(verbs.map(v => v.infinitive));
+      index = 0;
+      order = shuffle(verbs);
     }
   }
 
   function ensureQuizSpec(v) {
     if (v.quiz && v.quiz.sentence && v.quiz.answer) return v.quiz;
-    const pp = v.pastParticiple || v.infinitive;
-    // Reflexive verbs need their reflexive pronoun before the auxiliary:
-    // "Hier, nous nous sommes ____ (se lever)", not "nous sommes ____".
-    const refl = v.isReflexive ? "nous " : "";
-    return {
-      tense: "Passé Composé",
-      sentence: `Hier, nous ${refl}${v.auxiliary === "être" ? "sommes" : "avons"} ____ (${v.infinitive}).`,
-      en: `Practice the past participle of ${v.infinitive} (${v.meaning}).`,
-      answer: pp,
-      altAnswers: [pp + "s", pp + "e", pp + "es"],
-      explanation: v.isReflexive
-        ? `The past participle of ${v.infinitive} is ${pp} (with être: nous nous sommes ${pp}).`
-        : `The past participle of ${v.infinitive} is ${pp}.`
-    };
+    const form = (v.tenses.present[v.isImpersonal ? 2 : 3] || "").replace(/\*/g, "");
+    const subject = v.isImpersonal ? "il" : "nous";
+    const answer = form.replace(/^(nous|il\/elle|il)\s+/, "");
+    return { tense: "Présent", sentence: `${subject} ____ (${v.infinitive})`,
+      en: `Conjugate ${v.infinitive} for ${subject}.`, answer,
+      altAnswers: [form], explanation: `Présent: ${form}.` };
   }
 
   function render() {
@@ -157,7 +160,7 @@ export function createPracticeController({ getVerbs, speakFrench, onSwitchToNote
     flipped = false;
     index = index + 1;
     if (index >= order.length) {
-      order = verbs.map((_, i) => i).sort(() => Math.random() - 0.5);
+      order = shuffle(verbs);
       index = 0;
     }
     render();
@@ -197,13 +200,13 @@ export function createPracticeController({ getVerbs, speakFrench, onSwitchToNote
       const verbs = getVerbs();
       if (!verbs.length) return;
       flipped = !flipped;
-      renderFlashcard(verbs[index % verbs.length]);
+      renderFlashcard(verbs[order[index % order.length] ?? 0]);
     });
 
     $("flashcard-speak-btn")?.addEventListener("click", () => {
       const verbs = getVerbs();
       if (!verbs.length) return;
-      speakFrench(verbs[index % verbs.length].infinitive);
+      speakFrench(verbs[order[index % order.length] ?? 0].infinitive);
     });
 
     $("flashcard-next-btn")?.addEventListener("click", next);

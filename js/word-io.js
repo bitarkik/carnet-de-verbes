@@ -66,6 +66,7 @@ function createStoreZip(files) {
 
 function xmlEsc(str) {
   return String(str || "")
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
@@ -165,6 +166,7 @@ export function generateDocxBlob(verbs) {
 
 // Unzip word/document.xml from an existing Microsoft Word .docx file right in the browser!
 export async function extractTextFromDocx(file) {
+  if (file.size > 10 * 1024 * 1024) throw new Error("Word document exceeds 10 MB.");
   const buf = await file.arrayBuffer();
   const bytes = new Uint8Array(buf);
   const view = new DataView(buf);
@@ -187,6 +189,7 @@ export async function extractTextFromDocx(file) {
     if (view.getUint32(ptr, true) !== 0x02014b50) break;
     const method = view.getUint16(ptr + 10, true);
     const compSize = view.getUint32(ptr + 20, true);
+    const uncompressedSize = view.getUint32(ptr + 24, true);
     const nameLen = view.getUint16(ptr + 28, true);
     const extraLen = view.getUint16(ptr + 30, true);
     const commentLen = view.getUint16(ptr + 32, true);
@@ -194,6 +197,7 @@ export async function extractTextFromDocx(file) {
     const name = dec.decode(bytes.subarray(ptr + 46, ptr + 46 + nameLen));
 
     if (name === "word/document.xml") {
+      if (uncompressedSize > 20 * 1024 * 1024) throw new Error("Word document text exceeds 20 MB.");
       const localNameLen = view.getUint16(localOffset + 26, true);
       const localExtraLen = view.getUint16(localOffset + 28, true);
       const dataStart = localOffset + 30 + localNameLen + localExtraLen;
@@ -205,9 +209,25 @@ export async function extractTextFromDocx(file) {
       } else if (method === 8 && typeof DecompressionStream !== "undefined") {
         const ds = new DecompressionStream("deflate-raw");
         const writer = ds.writable.getWriter();
-        writer.write(compBytes);
-        writer.close();
-        const decompressed = await new Response(ds.readable).arrayBuffer();
+        const writing = writer.write(compBytes).then(() => writer.close());
+        const chunks = [];
+        const reader = ds.readable.getReader();
+        let total = 0;
+        try {
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            total += value.length;
+            if (total > 20 * 1024 * 1024) throw new Error("Expanded Word text exceeds 20 MB.");
+            chunks.push(value);
+          }
+          await writing;
+        } catch (error) {
+          await reader.cancel(error).catch(() => {});
+          await writing.catch(() => {});
+          throw error;
+        }
+        const decompressed = await new Blob(chunks).arrayBuffer();
         xmlText = dec.decode(decompressed);
       } else {
         throw new Error("Unsupported compression method in .docx file.");

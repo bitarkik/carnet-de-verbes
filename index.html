@@ -12,7 +12,7 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./assets/icon-192.png" />
   <link rel="apple-touch-icon" href="./assets/icon-180.png" />
   <link rel="manifest" href="./manifest.webmanifest" />
-  <link rel="stylesheet" href="./css/styles.css?v=24" />
+  <link rel="stylesheet" href="./css/styles.css?v=25" />
 </head>
 <body>
   <div class="wrap">
@@ -35,6 +35,7 @@
       </button>
     </header>
 
+    <div id="storage-warning" class="alert-box hidden" role="alert"></div>
     <!-- Main Notebook View -->
     <main id="view-notebook">
       <!-- Add Box -->
@@ -127,7 +128,7 @@
       </button>
     </main>
 
-    <!-- 2-Minute Practice View -->
+    <!-- Practice View -->
     <section id="view-practice" class="practice-view hidden">
       <div id="practice-empty-card" class="empty-card hidden">
         <strong>Add a verb to your notebook first.</strong><br />
@@ -138,7 +139,7 @@
       <div id="practice-card" class="card open practice-box">
         <div class="practice-header">
           <div>
-            <h2 class="practice-title">2-Min Practice</h2>
+            <h2 class="practice-title">Practice</h2>
             <p class="practice-sub">Active recall drills on your personal verbs.</p>
           </div>
           <div class="practice-controls">
@@ -171,7 +172,7 @@
           </div>
 
           <div class="quiz-input-row">
-            <input id="quiz-answer-input" type="text" placeholder="Type the conjugated verb..." autocomplete="off" autocapitalize="none" />
+            <input id="quiz-answer-input" aria-label="Conjugated verb answer" type="text" placeholder="Type the conjugated verb..." autocomplete="off" autocapitalize="none" />
             <button id="quiz-check-btn" type="button" class="add-btn">Check</button>
           </div>
 
@@ -184,7 +185,7 @@
 
         <!-- Flashcards -->
         <div id="quiz-flashcard-container" class="practice-mode-wrap hidden">
-          <div id="flashcard-stage" class="flashcard-box">
+          <div id="flashcard-stage" role="button" tabindex="0" aria-label="Flip flashcard" class="flashcard-box">
             <span id="flashcard-side-label" class="lbl">English Meaning (tap to flip)</span>
             <div id="flashcard-main-text" class="flashcard-main"></div>
             <div id="flashcard-sub-text" class="flashcard-sub"></div>
@@ -201,18 +202,18 @@
 
   <!-- ==================== SIDEBAR DRAWER (Word, AI, Sync, Theme) ==================== -->
   <div id="drawer-backdrop" class="drawer-backdrop hidden" aria-hidden="true"></div>
-  <aside id="settings-drawer" class="drawer" aria-label="Settings and tools" aria-hidden="true">
+  <aside id="settings-drawer" class="drawer" role="dialog" aria-modal="true" inert aria-label="Settings and tools" aria-hidden="true">
     <div class="drawer-header">
       <h2>Notebook Tools &amp; Sync</h2>
       <button id="close-drawer-btn" type="button" class="icon-circle-btn small" aria-label="Close menu">✕</button>
     </div>
 
     <div class="drawer-body">
-      <!-- 2-Min Practice Mode Nav -->
+      <!-- Practice Mode Nav -->
       <div class="drawer-section">
         <div class="lbl">Practice &amp; Study</div>
         <button id="drawer-practice-btn" type="button" class="drawer-action-btn primary-soft">
-          <span>🎯 Open 2-Min Practice Drills</span>
+          <span>🎯 Open Practice Drills</span>
           <span class="chev">›</span>
         </button>
       </div>
@@ -230,6 +231,7 @@
           <button id="drawer-export-json-btn" type="button" class="drawer-action-btn">
             <span>📦 Download JSON Backup</span>
           </button>
+          <button id="drawer-recovery-btn" type="button" class="drawer-action-btn">Download pre-restore recovery copy</button>
           <button id="drawer-import-json-btn" type="button" class="drawer-action-btn">
             <span>📤 Restore from JSON Backup</span>
           </button>
@@ -239,9 +241,9 @@
       <!-- Phone <-> Laptop Cloud Sync -->
       <div class="drawer-section">
         <div class="lbl">Phone ↔ Laptop Sync (GitHub Gist)</div>
-        <p class="drawer-help">Keep your notebook synced across your phone and laptop in a private GitHub Gist.</p>
+        <p class="drawer-help">Keep your notebook synced across your phone and laptop in a secret GitHub Gist. Secret Gists are accessible to anyone with their URL. Avoid simultaneous edits on multiple devices.</p>
         <div class="input-with-btn">
-          <input id="drawer-github-token" type="password" placeholder="GitHub Personal Access Token (gist)" autocomplete="off" />
+          <input id="drawer-github-token" aria-label="GitHub Gist token" type="password" placeholder="GitHub Personal Access Token (gist)" autocomplete="off" />
           <button id="drawer-sync-btn" type="button" class="add-btn small">Sync</button>
         </div>
         <span id="drawer-sync-status" class="drawer-help-meta"></span>
@@ -249,16 +251,18 @@
 
       <!-- Google Gemini API Key -->
       <div class="drawer-section">
-        <div class="lbl">Gemini AI (All 12,000+ Verbs &amp; Vision)</div>
+        <div class="lbl">Gemini AI (Verb Lookup &amp; Vision)</div>
         <p class="drawer-help">
-          Paste a free Gemini key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a> to unlock any French verb &amp; real Duolingo screenshot scanning.
+          Screenshots and text used for AI lookup are sent to Google. Generated content can contain errors; review it before studying. Paste a Gemini key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a> to unlock any French verb &amp; real Duolingo screenshot scanning.
         </p>
         <div class="input-with-btn">
-          <input id="drawer-gemini-key" type="password" placeholder="AIzaSy..." autocomplete="off" />
+          <input id="drawer-gemini-key" aria-label="Gemini API key" type="password" placeholder="AIzaSy..." autocomplete="off" />
           <button id="drawer-test-key-btn" type="button" class="add-btn small">Save</button>
         </div>
       </div>
 
+      <label class="drawer-help"><input id="remember-credentials" type="checkbox" /> Remember credentials on this device</label>
+      <p class="drawer-help">API keys and tokens stay in this tab unless you choose to remember them. Use a token with only Gist access, on a trusted device. Clearing browser storage removes this notebook and its credentials; download a JSON backup first.</p>
       <!-- Appearance -->
       <div class="drawer-section">
         <div class="lbl">Appearance</div>
@@ -273,7 +277,7 @@
           <span class="status-indicator"></span>
           <div>
             <strong>139-verb offline starter pack active.</strong><br />
-            Connect a free Gemini key above for all 12,000+ French verbs and live Duolingo screenshot scanning.
+            Connect a free Gemini key above for additional French verbs and live Duolingo screenshot scanning.
           </div>
         </div>
 
@@ -281,7 +285,7 @@
           <span class="status-indicator green"></span>
           <div>
             <strong>● Gemini AI Active</strong><br />
-            All 12,000+ French verbs &amp; Duolingo screenshot scanning are ready on your phone and laptop.
+            Additional French verbs &amp; Duolingo screenshot scanning are ready on your phone and laptop.
           </div>
         </div>
       </div>
@@ -289,17 +293,17 @@
   </aside>
 
   <!-- Screenshot OCR Modal -->
-  <div id="screenshot-modal" class="modal-backdrop hidden">
+  <div id="screenshot-modal" role="dialog" aria-modal="true" aria-label="Add from screenshot" class="modal-backdrop hidden">
     <div class="modal-card">
       <div class="modal-head">
         <h2>Add from Duolingo Screenshot</h2>
-        <button id="close-screenshot-btn" type="button" class="icon-circle-btn small">✕</button>
+        <button id="close-screenshot-btn" aria-label="Close screenshot dialog" type="button" class="icon-circle-btn small">✕</button>
       </div>
       <div class="modal-body">
         <div id="screenshot-ai-needed-alert" class="alert-box hidden">
           Connect your free Gemini key in the menu to let AI vision extract verbs from your phone screenshots.
         </div>
-        <div id="screenshot-dropzone" class="dropzone">
+        <div id="screenshot-dropzone" role="button" tabindex="0" class="dropzone">
           <p><strong>Tap here to select Duolingo screenshot(s)</strong></p>
           <p class="sub">PNG, JPG, or WebP from your phone or laptop</p>
           <input id="screenshot-file-input" type="file" accept="image/*" multiple class="hidden" />
@@ -316,6 +320,6 @@
   <input id="import-docx-file-input" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="hidden" />
   <input id="import-json-file-input" type="file" accept=".json,application/json" class="hidden" />
 
-  <script type="module" src="./js/app.js?v=24"></script>
+  <script type="module" src="./js/app.js?v=25"></script>
 </body>
 </html>

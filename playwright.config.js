@@ -1,0 +1,2 @@
+import { defineConfig } from "@playwright/test";
+export default defineConfig({ testDir: "./browser-tests", use: { baseURL: "http://127.0.0.1:4173", headless: true }, webServer: { command: "node tests/server.js", url: "http://127.0.0.1:4173", reuseExistingServer: false }, projects: [{name:"desktop",use:{viewport:{width:1280,height:900}}},{name:"mobile",use:{viewport:{width:390,height:844},isMobile:true,hasTouch:true}}] });

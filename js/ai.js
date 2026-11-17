@@ -1,14 +1,15 @@
+import { validateVerb } from "./validation.js?v=25";
 // ==========================================================================
 // Live Google Gemini AI Integration (Verb Lookup, Screenshot Vision, Word Import)
 // ==========================================================================
 
-import { normalizeVerbEntry } from "./french-engine.js?v=24";
+import { normalizeVerbEntry } from "./french-engine.js?v=25";
 
-// Modern Gemini 3.x Flash series models ordered by free-tier quota (500 RPD vs 20 RPD)
+// Documented Gemini models; availability and quotas depend on the account.
 const MODELS = [
-  "gemini-3.5-flash-lite", // Primary: 500 requests/day & 15 requests/min (high quota, ultra-fast ~1s)
-  "gemini-3.8-flash",      // Fallback 1: High quality reasoning (20 requests/day free tier)
-  "gemini-3.6-flash"       // Fallback 2: (20 requests/day free tier)
+  "gemini-3.5-flash-lite",
+  "gemini-3.8-flash",
+  "gemini-3.6-flash"
 ];
 
 const VERB_ENTRY_SCHEMA_PROMPT = `
@@ -93,7 +94,7 @@ async function callGemini(apiKey, contents) {
   const cleanKey = String(apiKey || "").trim();
 
   for (const model of MODELS) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(cleanKey)}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
     // Try JSON mode first; if a model returns an empty candidate in JSON mode, retry plain text mode
     const configsToTry = [
@@ -109,7 +110,8 @@ async function callGemini(apiKey, contents) {
         const res = await fetch(url, {
           method: "POST",
           headers: {
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "x-goog-api-key": cleanKey
           },
           signal: controller.signal,
           body: JSON.stringify({
@@ -118,12 +120,11 @@ async function callGemini(apiKey, contents) {
           })
         });
 
-        clearTimeout(timer);
-
         if (!res.ok) {
           const errBody = await res.json().catch(() => ({}));
           const msg = errBody?.error?.message || `Gemini HTTP ${res.status}`;
           lastErr = new Error(msg);
+          clearTimeout(timer);
           if (res.status === 401 || res.status === 403) {
             throw lastErr;
           }
@@ -132,6 +133,7 @@ async function callGemini(apiKey, contents) {
 
         const data = await res.json();
         const parsed = extractJsonFromGeminiData(data);
+        clearTimeout(timer);
         if (parsed) {
           return parsed;
         }
@@ -162,7 +164,8 @@ export async function testGeminiKey(apiKey) {
   const parsed = await callGemini(apiKey, [
     { parts: [{ text: 'Return JSON: {"ok": true, "greeting": "Bonjour !"}' }] }
   ]);
-  return !!parsed?.ok;
+  if (parsed?.ok !== true) throw new Error("Gemini did not return a valid verification response.");
+  return true;
 }
 
 export async function lookupVerbWithAI(rawInput, apiKey) {
@@ -179,9 +182,21 @@ ${VERB_ENTRY_SCHEMA_PROMPT}`;
   }
   return {
     ok: true,
-    verb: normalizeVerbEntry(result.verb),
+    verb: checkedAIVerb(result.verb),
     detectedFrom: result.detectedFrom || null
   };
+}
+
+function checkedAIVerb(raw) {
+  const v = normalizeVerbEntry(validateVerb(raw));
+  const usesEtre = v.auxiliary === "être";
+  for (const form of v.tenses.passeCompose) {
+    if (form.startsWith("—")) continue;
+    const etreForm = /\b(suis|es|est|sommes|êtes|sont)\b/.test(form);
+    if (etreForm !== usesEtre) throw new Error("AI returned inconsistent auxiliary and conjugations. Please retry.");
+    if (v.isReflexive && !/\b(me|te|se|nous|vous)\b|[mts]'/i.test(form)) throw new Error("AI omitted a reflexive pronoun. Please retry.");
+  }
+  return v;
 }
 
 function fileToInlineData(file) {
@@ -223,12 +238,13 @@ ${VERB_ENTRY_SCHEMA_PROMPT}`;
   ]);
   const entries = Array.isArray(result?.entries) ? result.entries : [];
   return entries.map((item) =>
-    item?.verb ? { ...item, verb: normalizeVerbEntry(item.verb) } : item
+    item?.verb ? { ...item, verb: checkedAIVerb(item.verb) } : item
   );
 }
 
 export async function extractVerbsFromWordTextWithAI(docText, apiKey) {
-  const snippet = docText.slice(0, 15000);
+  if (docText.length > 15000) throw new Error("AI Word extraction is limited to 15,000 characters. Split the document into smaller files.");
+  const snippet = docText;
   const prompt = `Below is text extracted from a student's Microsoft Word French verb document.
 Extract every distinct French verb listed or studied in this document and return its lowercase French infinitive (include "se " or "s'" if it is listed as a reflexive verb, e.g. "se lever", "s'appeler").
 Skip English words and skip auxiliary-only occurrences inside full conjugation tables if the main verb heading is already included.
