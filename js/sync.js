@@ -1,4 +1,4 @@
-import { validateState } from "./validation.js?v=25";
+import { validateState } from "./validation.js?v=26";
 // ==========================================================================
 // Local Auto-Save + 2-Way GitHub Gist Cloud Sync (Phone <-> Laptop)
 // ==========================================================================
@@ -11,7 +11,17 @@ export function loadLocalState() {
   try {
     const raw = localStorage.getItem(STATE_KEY);
     if (!raw) return { verbs: [], tombstones: {} };
-    return validateState(JSON.parse(raw));
+    const parsed = JSON.parse(raw);
+    const state = validateState(parsed);
+    try { validateState(parsed, { legacy: false }); }
+    catch {
+      // Preserve the exact original bytes once, before the app can save a compatible state.
+      try {
+        const key = "carnet_de_verbes_before_compatibility";
+        if (localStorage.getItem(key) === null) localStorage.setItem(key, raw);
+      } catch { /* Full storage must not prevent reading the existing notebook. */ }
+    }
+    return state;
   } catch (error) {
     throw new Error(`Stored notebook could not be read. Export your browser data before resetting it. ${error.message}`);
   }
@@ -162,6 +172,12 @@ export async function syncWithGitHubGist(localState, settings) {
   catch (error) { throw new Error(`Remote notebook is invalid. Nothing was overwritten. ${error.message}`); }
 
   const merged = mergeNotebookStates(localState, remoteState);
+  const files = { [GIST_FILENAME]: { content: JSON.stringify(merged, null, 2) } };
+  try { validateState(JSON.parse(fileObj.content), { legacy: false }); }
+  catch {
+    const backupName = "carnet-de-verbes-before-compatibility.json";
+    if (!gist.files[backupName]) files[backupName] = { content: fileObj.content };
+  }
 
   // Detect intervening remote edits; GitHub Gists do not provide an atomic merge API.
   const latest = await ghFetch(`/gists/${gistId}`, token);
@@ -171,11 +187,7 @@ export async function syncWithGitHubGist(localState, settings) {
   await ghFetch(`/gists/${gistId}`, token, {
     method: "PATCH",
     body: JSON.stringify({
-      files: {
-        [GIST_FILENAME]: {
-          content: JSON.stringify(merged, null, 2)
-        }
-      }
+      files
     })
   });
 

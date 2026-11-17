@@ -81,3 +81,38 @@ test("Gemini rejects malformed and auxiliary-inconsistent learning entries",asyn
     await assert.rejects(lookupVerbWithAI("mock","mock-key"));
   }
 });
+
+function legacyNotebook() {
+  const verbs=Object.values(OFFLINE_DICTIONARY).map(v=>({...structuredClone(v),updatedAt:1}));
+  while(verbs.length<160) verbs.push({...verb(),infinitive:`legacy-${verbs.length}`,note:`original note ${verbs.length}`,updatedAt:1});
+  verbs[159].infinitive="retourner";
+  verbs[159].tenses.passeCompose=[...verbs[159].tenses.passeCompose,...verbs[159].tenses.passeCompose];
+  return {verbs,tombstones:{}};
+}
+test("legacy 160-verb notebook loads without discarding extended tense arrays or notes",()=>{
+  const original=legacyNotebook();
+  assert.throws(()=>validateVerb(original.verbs[159]),/passeCompose/);
+  const loaded=validateState(original);
+  assert.equal(loaded.verbs.length,160);
+  assert.deepEqual(loaded,original);
+  assert.equal(loaded.verbs[159].tenses.passeCompose.length,12);
+  globalThis.localStorage=storage();
+  const raw=JSON.stringify(original);
+  localStorage.setItem("carnet_de_verbes_state_v1",raw);
+  assert.equal(loadLocalState().verbs.length,160);
+  assert.equal(localStorage.getItem("carnet_de_verbes_state_v1"),raw);
+  assert.equal(localStorage.getItem("carnet_de_verbes_before_compatibility"),raw);
+});
+test("sync recovers all 160 remote entries into a 69-entry client and retains exact remote original",async()=>{
+  const remote=legacyNotebook(),raw=JSON.stringify(remote);
+  let patch;
+  globalThis.fetch=async(url,options={})=>{
+    if(options.method==="PATCH") {patch=JSON.parse(options.body);return {ok:true,json:async()=>({})};}
+    return {ok:true,json:async()=>({public:false,files:{"carnet-de-verbes-sync.json":{content:raw}}})};
+  };
+  const result=await syncWithGitHubGist({verbs:remote.verbs.slice(0,69),tombstones:{}},{githubToken:"mock",gistId:"mock"});
+  assert.equal(result.merged.verbs.length,160);
+  assert.equal(result.merged.verbs.find(v=>v.infinitive==="retourner").tenses.passeCompose.length,12);
+  assert.equal(patch.files["carnet-de-verbes-before-compatibility.json"].content,raw);
+  assert.equal(JSON.parse(patch.files["carnet-de-verbes-sync.json"].content).verbs.length,160);
+});

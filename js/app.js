@@ -1,4 +1,4 @@
-import { validateVerb, validateState } from "./validation.js?v=25";
+import { validateVerb, validateState } from "./validation.js?v=26";
 // ==========================================================================
 // Carnet de Verbes — Clean Accordion Notebook Controller (Muse-Inspired)
 // ==========================================================================
@@ -9,16 +9,16 @@ import {
   stripAccents,
   normalizeVerbEntry,
   getReflexiveCounterpart
-} from "./french-engine.js?v=25";
+} from "./french-engine.js?v=26";
 import {
   testGeminiKey,
   lookupVerbWithAI,
   extractVerbsFromScreenshots,
   extractVerbsFromWordTextWithAI
-} from "./ai.js?v=25";
-import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=25";
-import { loadLocalState, saveLocalState, loadSettings, saveSettings as writeSettings, syncWithGitHubGist, mergeNotebookStates } from "./sync.js?v=25";
-import { createPracticeController } from "./practice.js?v=25";
+} from "./ai.js?v=26";
+import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=26";
+import { loadLocalState, saveLocalState, loadSettings, saveSettings as writeSettings, syncWithGitHubGist, mergeNotebookStates } from "./sync.js?v=26";
+import { createPracticeController } from "./practice.js?v=26";
 
 const TENSES = [
   { key: "present", label: "Présent" },
@@ -36,7 +36,19 @@ const $ = (id) => document.getElementById(id);
 let initialState;
 try { initialState = loadLocalState(); }
 catch (error) {
-  document.body.textContent = error.message;
+  const message = document.createElement("p");
+  message.textContent = `${error.message} Your stored notebook has not been replaced. Download the original below for recovery; do not clear site data.`;
+  const download = document.createElement("button");
+  download.textContent = "Download original saved notebook";
+  download.addEventListener("click", () => {
+    const raw = localStorage.getItem("carnet_de_verbes_state_v1");
+    const url = URL.createObjectURL(new Blob([raw || ""], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url; link.download = "carnet-de-verbes-recovery-original.json";
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  });
+  document.body.replaceChildren(message, download);
   throw error; // Never replace unreadable saved data with an empty notebook.
 }
 let { verbs, tombstones } = initialState;
@@ -1182,8 +1194,8 @@ function init() {
     catch (error) { showMsg(error.message, { isError: true }); }
   });
   $("drawer-recovery-btn").addEventListener("click", () => {
-    const raw = localStorage.getItem("carnet_de_verbes_before_restore");
-    if (!raw) { showMsg("No pre-restore copy is available yet."); return; }
+    const raw = localStorage.getItem("carnet_de_verbes_before_compatibility") || localStorage.getItem("carnet_de_verbes_before_restore");
+    if (!raw) { showMsg("No recovery copy is available yet."); return; }
     const url = URL.createObjectURL(new Blob([raw], { type: "application/json" }));
     const link = document.createElement("a");
     link.href = url; link.download = "carnet-de-verbes-before-restore.json";
@@ -1300,7 +1312,7 @@ function init() {
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register("./sw.js?v=25")
+        .register("./sw.js?v=26")
         .then((reg) => {
           reg.update().catch(() => {});
           // Listen for updates and automatically refresh if new version found

@@ -99,3 +99,19 @@ test("storage failure stays visible and malformed restore is atomic",async({page
   await page.getByRole("textbox",{name:"Note for prendre"}).fill("not saved");
   await expect(page.locator("#storage-warning")).toContainText("could not be saved");
 });
+
+test("legacy 160-entry notebook remains accessible after upgrade",async({page})=>{
+  const verbs=Array.from({length:160},(_,i)=>({...structuredClone(OFFLINE_DICTIONARY.prendre),infinitive:i===159?"retourner":`legacy-${i}`,note:`note ${i}`,addedAt:i+1,updatedAt:i+1}));
+  verbs[159].tenses.passeCompose.push(...verbs[159].tenses.passeCompose);
+  await page.addInitScript(({stateKey,verbs})=>{if(!localStorage.getItem(stateKey))localStorage.setItem(stateKey,JSON.stringify({verbs,tombstones:{}}));},{stateKey,verbs});
+  await page.goto("/");await expect(page.locator("html")).toHaveAttribute("data-ready","true");
+  await expect(page.locator("#verb-count-label")).toHaveText("160 verbs saved");
+  const raw=await page.evaluate(stateKey=>localStorage.getItem(stateKey),stateKey);
+  expect(JSON.parse(raw).verbs[159].tenses.passeCompose).toHaveLength(12);
+  await expect(page.getByRole("textbox",{name:"Note for legacy-0"})).toHaveValue("note 0");
+  await page.reload();await expect(page.locator("#verb-count-label")).toHaveText("160 verbs saved");
+  await page.getByRole("button",{name:"Menu and settings"}).click();
+  const download=page.waitForEvent("download");
+  await page.getByRole("button",{name:"Download original recovery copy"}).click();
+  expect((await download).suggestedFilename()).toBe("carnet-de-verbes-before-restore.json");
+});

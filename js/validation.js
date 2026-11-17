@@ -1,14 +1,17 @@
-// Reject malformed external data before it can mutate a notebook.
+// New AI entries must meet the full schema. Saved notebooks predate that schema:
+// preserve variable-length and absent tense arrays rather than rejecting all entries.
 const TENSES = ["present", "passeCompose", "imparfait", "futur", "conditionnel"];
 const object = v => v !== null && typeof v === "object" && !Array.isArray(v);
 const text = v => typeof v === "string" && v.length <= 20000;
-export function validateVerb(v, depth = 0) {
+export function validateVerb(v, depth = 0, { legacy = false } = {}) {
   if (!object(v) || !text(v.infinitive) || !v.infinitive.trim() || !text(v.meaning) ||
       !text(v.pastParticiple) || !["avoir", "être"].includes(v.auxiliary) || !object(v.tenses)) {
     throw new Error("Invalid verb entry: missing or malformed required fields.");
   }
   for (const key of TENSES) {
-    if (!Array.isArray(v.tenses[key]) || v.tenses[key].length !== 6 || !v.tenses[key].every(text))
+    const forms = v.tenses[key];
+    if (legacy && forms === undefined) continue;
+    if (!Array.isArray(forms) || (!legacy && forms.length !== 6) || !forms.every(text))
       throw new Error(`Invalid conjugations for ${v.infinitive}: ${key}.`);
   }
   for (const key of ["note", "group"]) if (v[key] !== undefined && !text(v[key])) throw new Error(`Invalid ${key}.`);
@@ -20,14 +23,14 @@ export function validateVerb(v, depth = 0) {
   if (v.quiz !== undefined && (!object(v.quiz) || !["sentence", "answer", "tense", "en"].every(k => text(v.quiz[k])) || !v.quiz.sentence.includes("____") || (v.quiz.altAnswers !== undefined && (!Array.isArray(v.quiz.altAnswers) || !v.quiz.altAnswers.every(text))) || (v.quiz.explanation !== undefined && !text(v.quiz.explanation)))) throw new Error("Invalid practice question.");
   if (v.counterpartData !== undefined) {
     if (depth >= 1) throw new Error("Nested counterpart data is unsupported.");
-    validateVerb(v.counterpartData, depth + 1);
+    validateVerb(v.counterpartData, depth + 1, { legacy });
   }
   return structuredClone(v);
 }
-export function validateState(value) {
+export function validateState(value, { legacy = true } = {}) {
   if (Array.isArray(value)) value = { verbs: value, tombstones: {} };
   if (!object(value) || !Array.isArray(value.verbs) || value.verbs.length > 10000) throw new Error("Invalid notebook format.");
   const tombstones = value.tombstones ?? {};
   if (!object(tombstones) || !Object.entries(tombstones).every(([key, ts]) => key.trim() && Number.isFinite(ts) && ts >= 0)) throw new Error("Invalid deletion history.");
-  return { verbs: value.verbs.map(v => validateVerb(v)), tombstones: { ...tombstones } };
+  return { verbs: value.verbs.map(v => validateVerb(v, 0, { legacy })), tombstones: { ...tombstones } };
 }

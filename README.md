@@ -56,3 +56,7 @@ npm run test:browser
 Tests use synthetic notebooks and mocked GitHub/Gemini calls; they do not access real user data. Browser checks cover desktop/mobile viewport flows, keyboard focus, automated accessibility rules, and offline reload. Real-device Safari, live provider quotas, and Microsoft Word page layout still require manual verification.
 
 Changes are developed on a separate branch and reviewed through a pull request. Revert a merged change with `git revert <commit>`; code rollback does not undo remote data writes. To recover Gist data, consult its revision history and your JSON backups before syncing again.
+
+### Existing notebook compatibility
+
+Saved and synced notebooks may contain variable-length conjugation arrays produced before strict AI validation was introduced. Loading, restoring, and merging preserve those arrays and all entries; newly generated AI entries still require six forms per tense. The first compatible load of an older-format notebook keeps the exact original JSON under `carnet_de_verbes_before_compatibility`, downloadable through Settings → Download original recovery copy. Before syncing an older-format remote notebook, its original JSON is also retained once in `carnet-de-verbes-before-compatibility.json` in the same Gist. A load failure offers an original-data download and does not initialize or sync an empty notebook. Do not clear site storage to resolve a compatibility error.
