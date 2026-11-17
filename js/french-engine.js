@@ -729,9 +729,9 @@ export function stripAccents(str) {
 }
 
 // Build full offline dictionary + automatic reverse conjugated lookup index
-export const OFFLINE_DICTIONARY = {};
-export const CONJUGATED_INDEX = {};
-export const UNACCENTED_INDEX = {};
+export const OFFLINE_DICTIONARY = Object.create(null);
+export const CONJUGATED_INDEX = Object.create(null);
+export const UNACCENTED_INDEX = Object.create(null);
 
 for (const [inf, spec] of Object.entries(SPECS)) {
   const entry = buildFromSpec(inf, spec);
@@ -887,6 +887,13 @@ export function lookupOfflineVerb(rawInput) {
     };
   }
 
+  // Expand combined subject labels used by the display dictionary.
+  const indexedInput = cleaned.replace(/^(il|elle|on) /, "il/elle ")
+    .replace(/^(ils|elles) /, "ils/elles ");
+  if (CONJUGATED_INDEX[indexedInput]) {
+    return { ok: true, verb: structuredClone(OFFLINE_DICTIONARY[CONJUGATED_INDEX[indexedInput]]), detectedFrom: rawInput.trim() };
+  }
+
   // 2. Direct conjugated phrase match
   if (CONJUGATED_INDEX[cleaned]) {
     const inf = CONJUGATED_INDEX[cleaned];
@@ -1037,21 +1044,12 @@ export function extractOfflineVerbsFromText(text) {
       continue;
     }
 
-    // If line has explicit "FrenchVerb (to English meaning)" format, also support regular -er/-ir/-re verbs
+    // Explicit verb headings are accepted only when the dictionary knows them.
     const explicitMatch = line.match(/^(?:\d+[.)]\s*)?([A-Za-zÀ-ÿ'’ -]{3,28}?)\s*\((to\s+[^)]+)\)/i);
     if (explicitMatch) {
       const candidateInf = explicitMatch[1].trim().toLowerCase().replace(/’/g, "'");
-      const candidateMeaning = explicitMatch[2].trim();
-      if (!addIfKnown(candidateInf) && !seen.has(candidateInf) && /(er|ir|re)$/.test(candidateInf)) {
-        seen.add(candidateInf);
-        found.push(
-          buildFromSpec(candidateInf, {
-            m: candidateMeaning,
-            ex: [`Je pratique le verbe « ${candidateInf} ».`, `Meaning: ${candidateMeaning}.`]
-          })
-        );
-        continue;
-      }
+      addIfKnown(candidateInf);
+      continue; // Unknown verbs require a verified dictionary or AI lookup; never guess a class.
     }
 
     const segments = line.split(/[,:;•|—–=()/\[\]\t]+/);

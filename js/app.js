@@ -1,3 +1,4 @@
+import { validateVerb, validateState } from "./validation.js?v=25";
 // ==========================================================================
 // Carnet de Verbes — Clean Accordion Notebook Controller (Muse-Inspired)
 // ==========================================================================
@@ -8,16 +9,16 @@ import {
   stripAccents,
   normalizeVerbEntry,
   getReflexiveCounterpart
-} from "./french-engine.js?v=24";
+} from "./french-engine.js?v=25";
 import {
   testGeminiKey,
   lookupVerbWithAI,
   extractVerbsFromScreenshots,
   extractVerbsFromWordTextWithAI
-} from "./ai.js?v=24";
-import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=24";
-import { loadLocalState, saveLocalState, loadSettings, saveSettings, syncWithGitHubGist } from "./sync.js?v=24";
-import { createPracticeController } from "./practice.js?v=24";
+} from "./ai.js?v=25";
+import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=25";
+import { loadLocalState, saveLocalState, loadSettings, saveSettings as writeSettings, syncWithGitHubGist, mergeNotebookStates } from "./sync.js?v=25";
+import { createPracticeController } from "./practice.js?v=25";
 
 const TENSES = [
   { key: "present", label: "Présent" },
@@ -32,7 +33,13 @@ const PRONOUN_LABELS = ["je", "tu", "il / elle", "nous", "vous", "ils / elles"];
 const $ = (id) => document.getElementById(id);
 
 // ---------- State ----------
-let { verbs, tombstones } = loadLocalState();
+let initialState;
+try { initialState = loadLocalState(); }
+catch (error) {
+  document.body.textContent = error.message;
+  throw error; // Never replace unreadable saved data with an empty notebook.
+}
+let { verbs, tombstones } = initialState;
 verbs = verbs.map(normalizeVerbEntry);
 let settings = loadSettings();
 let openVerbId = verbs[0]?.infinitive || null;
@@ -44,6 +51,9 @@ let lastDeletedBackup = null;
 let toastTimer = null;
 let pendingScreenshots = [];
 let syncTimer = null;
+let syncInFlight = false;
+let screenshotUrls = [];
+let notebookRevision = 0;
 
 // ---------- Helpers ----------
 function esc(str) {
@@ -89,8 +99,19 @@ function showMsg(text, { isError = false, showUndo = false } = {}) {
   }, showUndo ? 7500 : 4500);
 }
 
+function storageWarning(message = "") {
+  $("storage-warning").textContent = message;
+  $("storage-warning").classList.toggle("hidden", !message);
+}
+function saveSettings(value) {
+  try { writeSettings(value); }
+  catch (error) { storageWarning(error.message); }
+}
+
 function persistAndScheduleSync() {
-  saveLocalState(verbs, tombstones);
+  notebookRevision++;
+  try { saveLocalState(verbs, tombstones); storageWarning(); }
+  catch (error) { storageWarning(error.message); return; }
   if (settings.githubToken) {
     if (syncTimer) clearTimeout(syncTimer);
     syncTimer = setTimeout(() => runCloudSync({ quiet: true }), 1500);
@@ -110,12 +131,40 @@ function updateDrawerNotes() {
   $("drawer-offline-note").classList.toggle("hidden", hasAI);
   $("drawer-online-note").classList.toggle("hidden", !hasAI);
 
+  $("remember-credentials").checked = settings.rememberCredentials;
   $("drawer-gemini-key").value = settings.geminiKey || "";
   $("drawer-github-token").value = settings.githubToken || "";
   $("drawer-sync-status").textContent = settings.lastSyncedAt
     ? `Last synced: ${new Date(settings.lastSyncedAt).toLocaleTimeString()}`
     : "Not synced yet.";
 }
+
+// Keep keyboard focus inside the active overlay and restore it on close.
+let activeDialog = null;
+let dialogOpener = null;
+function activateDialog(dialog) {
+  dialogOpener = document.activeElement;
+  activeDialog = dialog;
+  dialog.inert = false;
+  document.querySelector(".wrap").inert = true;
+  dialog.querySelector("button, input, [tabindex='0']")?.focus();
+}
+function deactivateDialog(dialog) {
+  if (dialog.id === "settings-drawer") dialog.inert = true;
+  if (activeDialog !== dialog) return;
+  activeDialog = null;
+  document.querySelector(".wrap").inert = false;
+  dialogOpener?.focus();
+}
+document.addEventListener("keydown", event => {
+  if (event.key !== "Tab" || !activeDialog) return;
+  const controls = [...activeDialog.querySelectorAll("button, input, [tabindex='0'], a[href]")]
+    .filter(el => !el.disabled && el.getClientRects().length);
+  const first = controls[0], last = controls.at(-1);
+  if (!first) { event.preventDefault(); return; }
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+});
 
 // ---------- Drawer Toggle ----------
 function openDrawer() {
@@ -124,6 +173,7 @@ function openDrawer() {
   $("settings-drawer").classList.add("open");
   $("drawer-backdrop").setAttribute("aria-hidden", "false");
   $("settings-drawer").setAttribute("aria-hidden", "false");
+  activateDialog($("settings-drawer"));
 }
 
 function closeDrawer() {
@@ -131,6 +181,7 @@ function closeDrawer() {
   $("settings-drawer").classList.remove("open");
   $("drawer-backdrop").setAttribute("aria-hidden", "true");
   $("settings-drawer").setAttribute("aria-hidden", "true");
+  deactivateDialog($("settings-drawer"));
 }
 
 // ---------- Practice Controller ----------
@@ -145,7 +196,7 @@ function showPracticeView() {
   $("view-notebook").classList.add("hidden");
   $("view-practice").classList.remove("hidden");
   $("header-back-btn").classList.remove("hidden");
-  $("header-title").textContent = "2-Min Practice";
+  $("header-title").textContent = "Practice";
   $("header-subtitle").textContent = "Active recall on your personal saved verbs";
   practice.render();
 }
@@ -160,8 +211,8 @@ function showNotebookView() {
 }
 
 // ---------- Verb CRUD ----------
-function upsertVerb(rawVerbObj, { select = true } = {}) {
-  const verbObj = normalizeVerbEntry(rawVerbObj);
+function upsertVerb(rawVerbObj, { select = true, defer = false } = {}) {
+  const verbObj = normalizeVerbEntry(validateVerb(rawVerbObj));
   const now = Date.now();
   const infKey = verbObj.infinitive.toLowerCase().trim();
   delete tombstones[infKey];
@@ -178,8 +229,7 @@ function upsertVerb(rawVerbObj, { select = true } = {}) {
     if (verbObj.quiz) existing.quiz = verbObj.quiz;
     existing.updatedAt = now;
     if (select) openVerbId = existing.infinitive;
-    persistAndScheduleSync();
-    render();
+    if (!defer) { persistAndScheduleSync(); render(); }
     return { alreadyExisted: true, verb: existing };
   }
 
@@ -192,8 +242,7 @@ function upsertVerb(rawVerbObj, { select = true } = {}) {
   };
   verbs.unshift(enriched);
   if (select) openVerbId = enriched.infinitive;
-  persistAndScheduleSync();
-  render();
+  if (!defer) { persistAndScheduleSync(); render(); }
   return { alreadyExisted: false, verb: enriched };
 }
 
@@ -405,8 +454,8 @@ function formatVerbCell(rawForm) {
   }
   // Strip redundant subject pronoun if already present so cell doesn't duplicate
   const formWithoutSubject = clean
-    .replace(/^(je|tu|il\/elle|il \/ elle|nous|vous|ils\/elles|ils \/ elles)\s+/, "")
-    .replace(/^j'/, "");
+    .replace(/^(je|tu|il\/elle|il \/ elle|il|elle|on|nous|vous|ils\/elles|ils \/ elles|ils|elles)\s+/, "")
+    .replace(/^j['’]/, "");
 
   const display = isHighlight ? `<span class="stem-highlight">${formWithoutSubject}</span>` : formWithoutSubject;
   return display;
@@ -433,7 +482,9 @@ async function switchCardVariant(cardInfinitive, targetInfinitive, btnEl) {
   // 2. Already saved elsewhere in the notebook
   const existingOther = verbs.find((v) => v.infinitive.toLowerCase() === targetInfinitive.toLowerCase());
   if (existingOther) {
-    cardVerb.counterpartData = normalizeVerbEntry(existingOther);
+    const { counterpartData, ...otherWithoutCounterpart } = existingOther;
+    cardVerb.counterpartData = normalizeVerbEntry(otherWithoutCounterpart);
+    cardVerb.updatedAt = Date.now();
     activeVariantMap[cardInfinitive] = targetInfinitive;
     persistAndScheduleSync();
     render();
@@ -444,6 +495,7 @@ async function switchCardVariant(cardInfinitive, targetInfinitive, btnEl) {
   const offline = lookupOfflineVerb(targetInfinitive);
   if (offline.ok) {
     cardVerb.counterpartData = normalizeVerbEntry(offline.verb);
+    cardVerb.updatedAt = Date.now();
     activeVariantMap[cardInfinitive] = targetInfinitive;
     persistAndScheduleSync();
     render();
@@ -464,6 +516,7 @@ async function switchCardVariant(cardInfinitive, targetInfinitive, btnEl) {
         return;
       }
       cardVerb.counterpartData = aiRes.verb;
+      cardVerb.updatedAt = Date.now();
       activeVariantMap[cardInfinitive] = targetInfinitive;
       persistAndScheduleSync();
       render();
@@ -504,6 +557,7 @@ function render() {
   // Update Filter Pills
   document.querySelectorAll(".pill-btn[data-filter]").forEach((p) => {
     p.classList.toggle("active", p.dataset.filter === activeFilter);
+    p.setAttribute("aria-pressed", String(p.dataset.filter === activeFilter));
   });
 
   if (totalCount === 0) return;
@@ -555,13 +609,13 @@ function render() {
           const f2 = forms[i2] || "";
           return `
             <div class="conj-row-pair">
-              <div class="conj-cell" data-speak="${esc(f1)}">
-                <span class="conj-pronoun">${PRONOUN_LABELS[i1]}</span>
+              <div class="conj-cell" role="button" tabindex="0" data-speak="${esc(f1)}">
+                <span class="conj-pronoun">${displayVerb.isImpersonal ? (i1 === 2 ? "il" : "—") : /^j['’]/.test(f1) ? "j’" : PRONOUN_LABELS[i1]}</span>
                 <span class="conj-verb">${formatVerbCell(f1)}</span>
                 <span class="speaker-icon">🔊</span>
               </div>
-              <div class="conj-cell" data-speak="${esc(f2)}">
-                <span class="conj-pronoun">${PRONOUN_LABELS[i2]}</span>
+              <div class="conj-cell" role="button" tabindex="0" data-speak="${esc(f2)}">
+                <span class="conj-pronoun">${displayVerb.isImpersonal ? (i2 === 2 ? "il" : "—") : /^j['’]/.test(f2) ? "j’" : PRONOUN_LABELS[i2]}</span>
                 <span class="conj-verb">${formatVerbCell(f2)}</span>
                 <span class="speaker-icon">🔊</span>
               </div>
@@ -581,7 +635,7 @@ function render() {
           <div class="card-head" data-toggle="${esc(v.infinitive)}">
             <div>
               <div class="card-title-row">
-                <h2>${esc(displayVerb.infinitive)}</h2>
+                <h2><button type="button" class="accordion-toggle" aria-expanded="${isOpen}" data-accordion="${esc(v.infinitive)}">${esc(displayVerb.infinitive)}</button></h2>
                 <button type="button" class="title-speak-btn" data-speak="${esc(displayVerb.infinitive)}" title="Pronounce ${esc(displayVerb.infinitive)}" aria-label="Pronounce ${esc(displayVerb.infinitive)}">🔊</button>
                 <span class="meaning">— ${esc(displayVerb.meaning)}</span>
               </div>
@@ -618,7 +672,7 @@ function render() {
               ${TENSES.map((t) => `
                 <button
                   type="button"
-                  class="${t.key === currentTense ? "on" : ""}"
+                  aria-pressed="${t.key === currentTense}" class="${t.key === currentTense ? "on" : ""}"
                   data-tense-for="${esc(v.infinitive)}"
                   data-tense-key="${t.key}"
                 >${t.label}</button>
@@ -665,6 +719,7 @@ function render() {
             <div class="note">
               <div class="lbl">My Note</div>
               <textarea
+                aria-label="Note for ${esc(v.infinitive)}"
                 rows="2"
                 placeholder="Add a note — a memory trick, where you heard it..."
                 data-note-for="${esc(v.infinitive)}"
@@ -686,6 +741,7 @@ function render() {
       const inf = head.dataset.toggle;
       openVerbId = openVerbId === inf ? null : inf;
       render();
+      container.querySelector(`[data-accordion="${CSS.escape(inf)}"]`)?.focus();
     });
   });
 
@@ -694,6 +750,12 @@ function render() {
     el.addEventListener("click", (e) => {
       e.stopPropagation();
       speakFrench(el.dataset.speak);
+    });
+  });
+
+  container.querySelectorAll("[data-speak][role='button']").forEach(el => {
+    el.addEventListener("keydown", event => {
+      if (event.key === "Enter" || event.key === " ") { event.preventDefault(); el.click(); }
     });
   });
 
@@ -781,6 +843,7 @@ async function handleImportDocx(file) {
   closeDrawer();
   showMsg(`Reading “${file.name}”...`);
   try {
+    const partialErrors = [];
     const text = await extractTextFromDocx(file);
     const verbMap = new Map();
     const existingSet = new Set(verbs.map((v) => v.infinitive.toLowerCase()));
@@ -818,7 +881,8 @@ async function handleImportDocx(file) {
             if (aiRes.ok && aiRes.verb) {
               verbMap.set(aiRes.verb.infinitive.toLowerCase(), aiRes.verb);
             }
-          } catch (_) {
+          } catch (error) {
+            partialErrors.push(`${targetInf}: ${error.message}`);
             // Continue importing remaining verbs even if one fails
           }
           // Brief pause when importing many AI verbs so free-tier RPM limits aren't triggered
@@ -826,21 +890,28 @@ async function handleImportDocx(file) {
             await new Promise((r) => setTimeout(r, 1200));
           }
         }
-      } catch (_) {
+      } catch (error) {
+        partialErrors.push(error.message);
         // Fall back to offline-extracted verbs if AI call fails
       }
     }
 
-    const importedVerbs = Array.from(verbMap.values());
+    const importedVerbs = Array.from(verbMap.values()).map(v => validateVerb(v));
     if (!importedVerbs.length) {
-      showMsg("Couldn't find French verbs in that .docx file.", { isError: true });
+      showMsg(partialErrors.length ? `No verbs imported. AI extraction failed: ${partialErrors.join("; ")}` : "No known French verbs found. Unknown verbs need Gemini; no conjugations were guessed.", { isError: true });
       return;
     }
 
     let added = 0;
     for (const v of importedVerbs.reverse()) {
-      const { alreadyExisted } = upsertVerb(v, { select: true });
+      const { alreadyExisted } = upsertVerb(v, { select: true, defer: true });
       if (!alreadyExisted) added += 1;
+    }
+    persistAndScheduleSync();
+    render();
+    if (partialErrors.length) {
+      showMsg(`Imported ${added} new verbs. AI import was incomplete: ${partialErrors.join("; ")}`, { isError: true });
+      return;
     }
     showMsg(
       added > 0
@@ -855,19 +926,23 @@ async function handleImportDocx(file) {
 async function handleImportJson(file) {
   if (!file) return;
   try {
+    if (file.size > 10 * 1024 * 1024) throw new Error("Backup exceeds 10 MB.");
     const raw = await file.text();
     const parsed = JSON.parse(raw);
-    const list = Array.isArray(parsed) ? parsed : parsed.verbs;
-    if (!Array.isArray(list)) throw new Error("Invalid backup format.");
-    let added = 0;
-    for (const v of list.reverse()) {
-      if (v?.infinitive) {
-        const { alreadyExisted } = upsertVerb(v);
-        if (!alreadyExisted) added += 1;
-      }
-    }
+    const restored = mergeNotebookStates({ verbs: [], tombstones: {} }, validateState(parsed)); // Validate everything before mutating any entry.
+    // Keep a local recovery copy before applying a backup.
+    localStorage.setItem("carnet_de_verbes_before_restore", JSON.stringify({ verbs, tombstones }));
+    const now = Date.now();
+    const incoming = { verbs: restored.verbs.map(v => ({ ...normalizeVerbEntry(v), updatedAt: now })), tombstones: restored.tombstones };
+    const merged = mergeNotebookStates({ verbs, tombstones }, incoming);
+    const added = incoming.verbs.filter(v => !verbs.some(old => old.infinitive === v.infinitive)).length;
+    verbs = merged.verbs;
+    tombstones = merged.tombstones;
+    openVerbId = verbs[0]?.infinitive || null;
+    persistAndScheduleSync();
+    render();
     closeDrawer();
-    showMsg(`Restored ${added} verb${added === 1 ? "" : "s"} from JSON backup ✓`);
+    showMsg(`Restored ${incoming.verbs.length} entries (${added} new) from JSON backup ✓`);
   } catch (err) {
     showMsg(`Backup restore failed: ${err.message}`, { isError: true });
   }
@@ -875,20 +950,34 @@ async function handleImportJson(file) {
 
 // ---------- Cloud Sync ----------
 async function runCloudSync({ quiet = false } = {}) {
+  if (syncInFlight) {
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => runCloudSync({ quiet }), 1500);
+    return;
+  }
   if (!settings.githubToken?.trim()) {
     openDrawer();
     $("drawer-github-token").focus();
     return;
   }
 
+  syncInFlight = true;
+  const syncSettings = { ...settings };
+  const revisionAtStart = notebookRevision;
   const syncBtn = $("drawer-sync-btn");
   syncBtn.disabled = true;
   syncBtn.textContent = "Syncing...";
 
   try {
-    const { gistId, merged } = await syncWithGitHubGist({ verbs, tombstones }, settings);
-    verbs = merged.verbs;
-    tombstones = merged.tombstones;
+    const { gistId, merged } = await syncWithGitHubGist(structuredClone({ verbs, tombstones }), syncSettings);
+    if (settings.githubToken !== syncSettings.githubToken) return;
+    const current = mergeNotebookStates({ verbs, tombstones }, merged);
+    verbs = current.verbs;
+    tombstones = current.tombstones;
+    if (notebookRevision !== revisionAtStart) {
+      clearTimeout(syncTimer);
+      syncTimer = setTimeout(() => runCloudSync({ quiet: true }), 1500);
+    }
     if (!openVerbId && verbs.length) openVerbId = verbs[0].infinitive;
 
     settings.gistId = gistId;
@@ -899,11 +988,12 @@ async function runCloudSync({ quiet = false } = {}) {
     updateDrawerNotes();
 
     if (!quiet) {
-      showMsg(`Synced ${verbs.length} verb${verbs.length === 1 ? "" : "s"} with your private GitHub Gist ✓`);
+      showMsg(`Synced ${verbs.length} verb${verbs.length === 1 ? "" : "s"} with your secret GitHub Gist ✓`);
     }
   } catch (err) {
-    if (!quiet) showMsg(`Sync error: ${err.message}`, { isError: true });
+    showMsg(`Sync error: ${err.message}`, { isError: true });
   } finally {
+    syncInFlight = false;
     syncBtn.disabled = false;
     syncBtn.textContent = "Sync";
   }
@@ -911,20 +1001,33 @@ async function runCloudSync({ quiet = false } = {}) {
 
 // ---------- Screenshot OCR ----------
 function openScreenshotModal() {
-  pendingScreenshots = [];
+  releaseScreenshots();
   $("screenshot-thumbs").innerHTML = "";
   $("scan-screenshot-submit-btn").disabled = true;
   $("screenshot-ai-needed-alert").classList.toggle("hidden", Boolean(settings.geminiKey?.trim()));
   $("screenshot-modal").classList.remove("hidden");
+  activateDialog($("screenshot-modal"));
 }
 
+function releaseScreenshots() {
+  screenshotUrls.forEach(url => URL.revokeObjectURL(url));
+  screenshotUrls = [];
+  pendingScreenshots = [];
+}
 function closeScreenshotModal() {
   $("screenshot-modal").classList.add("hidden");
+  releaseScreenshots();
+  deactivateDialog($("screenshot-modal"));
 }
 
 function stageScreenshotFiles(fileList) {
   const imgs = Array.from(fileList || []).filter((f) => f.type.startsWith("image/"));
   if (!imgs.length) return;
+  if (imgs.length > 10 || imgs.some(f => f.size > 5 * 1024 * 1024) || imgs.reduce((n, f) => n + f.size, 0) > 20 * 1024 * 1024) {
+    showMsg("Choose up to 10 images, each under 5 MB and under 20 MB total.", { isError: true });
+    return;
+  }
+  releaseScreenshots();
   pendingScreenshots = imgs;
 
   const strip = $("screenshot-thumbs");
@@ -933,6 +1036,7 @@ function stageScreenshotFiles(fileList) {
     const img = document.createElement("img");
     img.alt = file.name;
     img.src = URL.createObjectURL(file);
+    screenshotUrls.push(img.src);
     strip.appendChild(img);
   });
 
@@ -960,13 +1064,16 @@ async function runScreenshotScan() {
       return;
     }
 
+    entries.forEach(item => validateVerb(item.verb));
     let addedCount = 0;
     for (const item of entries) {
       if (item?.verb?.infinitive) {
-        const { alreadyExisted } = upsertVerb(item.verb, { select: true });
+        const { alreadyExisted } = upsertVerb(item.verb, { select: true, defer: true });
         if (!alreadyExisted) addedCount += 1;
       }
     }
+    persistAndScheduleSync();
+    render();
     closeScreenshotModal();
     showMsg(
       addedCount > 0
@@ -1037,6 +1144,7 @@ function init() {
           const offline = lookupOfflineVerb(cp);
           if (offline.ok) {
             v.counterpartData = normalizeVerbEntry(offline.verb);
+            v.updatedAt = Date.now();
             changed = true;
           }
         }
@@ -1068,6 +1176,20 @@ function init() {
   });
   $("empty-import-word-btn")?.addEventListener("click", () => $("import-docx-file-input").click());
 
+  $("remember-credentials").addEventListener("change", event => {
+    settings.rememberCredentials = event.target.checked;
+    try { saveSettings(settings); }
+    catch (error) { showMsg(error.message, { isError: true }); }
+  });
+  $("drawer-recovery-btn").addEventListener("click", () => {
+    const raw = localStorage.getItem("carnet_de_verbes_before_restore");
+    if (!raw) { showMsg("No pre-restore copy is available yet."); return; }
+    const url = URL.createObjectURL(new Blob([raw], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url; link.download = "carnet-de-verbes-before-restore.json";
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  });
   // Drawer Actions
   $("drawer-practice-btn").addEventListener("click", showPracticeView);
   $("drawer-export-docx-btn").addEventListener("click", handleDownloadDocx);
@@ -1076,7 +1198,12 @@ function init() {
   $("drawer-import-json-btn").addEventListener("click", () => $("import-json-file-input").click());
 
   $("drawer-sync-btn").addEventListener("click", () => {
-    settings.githubToken = $("drawer-github-token").value.trim();
+    const nextToken = $("drawer-github-token").value.trim();
+    if (settings.githubToken !== nextToken) {
+      settings.gistId = "";
+      settings.lastSyncedAt = null;
+    }
+    settings.githubToken = nextToken;
     saveSettings(settings);
     runCloudSync({ quiet: false });
   });
@@ -1111,6 +1238,12 @@ function init() {
     applyTheme(settings.theme === "dark" ? "light" : "dark");
   });
 
+  $("flashcard-stage").addEventListener("keydown", event => {
+    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.currentTarget.click(); }
+  });
+  $("screenshot-dropzone").addEventListener("keydown", event => {
+    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); $("screenshot-file-input").click(); }
+  });
   // Screenshot Modal
   $("close-screenshot-btn").addEventListener("click", closeScreenshotModal);
   $("screenshot-dropzone").addEventListener("click", () => $("screenshot-file-input").click());
@@ -1154,15 +1287,20 @@ function init() {
     });
   }
 
+  window.addEventListener("online", () => { if (settings.githubToken) runCloudSync({ quiet: true }); });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && settings.githubToken) runCloudSync({ quiet: true });
+  });
   render();
   updateDrawerNotes();
+  document.documentElement.dataset.ready = "true";
   if (settings.githubToken) runCloudSync({ quiet: true });
 
   // Register Service Worker for offline PWA functionality & installability
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register("./sw.js?v=24")
+        .register("./sw.js?v=25")
         .then((reg) => {
           reg.update().catch(() => {});
           // Listen for updates and automatically refresh if new version found

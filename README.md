@@ -8,9 +8,9 @@ A personal, AI-powered French verb notebook built for Duolingo learners—design
 - **Duolingo Screenshot Scanner:** Upload one or multiple phone screenshots from Duolingo lessons; Google Gemini Vision extracts the French verb(s) along with the exact sentence you saw.
 - **"What Duolingo Doesn't Explain" Cards:** Highlights `être` vs. `avoir` in *Passé Composé*, required prepositions (`à` vs. `de`), silent-ending pronunciation tips, and underlined irregular stems across 5 core tenses.
 - **French Audio (`fr-FR`):** Tap any verb, example sentence, or conjugation row to hear native browser pronunciation.
-- **2-Min Practice Mode:** Active-recall fill-in-the-blank drills (with a French accent bar) and flip flashcards generated exclusively from *your* saved verbs.
+- **Practice Mode:** Active-recall fill-in-the-blank drills (with a French accent bar) and flip flashcards generated exclusively from *your* saved verbs.
 - **Microsoft Word (`.docx`) Import & Export:** Import verbs from an existing `.docx` Word document, and download a formatted OpenXML `.docx` file with native Word tables anytime.
-- **Phone ↔ Laptop Sync:** Instant `localStorage` auto-save plus optional 2-way private **GitHub Gist** cloud sync.
+- **Phone ↔ Laptop Sync:** Instant `localStorage` auto-save plus optional 2-way secret **GitHub Gist** cloud sync.
 
 ## Deploying Free on GitHub Pages (with Optional Custom Domain)
 
@@ -32,3 +32,27 @@ python3 -m http.server 4173
 ```
 
 Then open `http://localhost:4173`.
+
+## Reliability, privacy, and recovery
+
+- Notebook data stays in this browser unless you use AI or Gist sync. AI requests send your submitted text or screenshots to Google. Generated French can be wrong; review it before studying. Supported models are listed in [Google’s model documentation](https://ai.google.dev/gemini-api/docs/models). Quotas and billing depend on your account.
+- Credentials are kept in tab session storage by default. “Remember credentials” persists them in local storage on this device. Existing saved credentials retain their previous behavior until you uncheck that option. Both storage types are readable by scripts on this origin. Use a trusted device and a GitHub token scoped only to Gists.
+- Secret Gists are unlisted, not access-controlled private vaults: anyone with the URL can read them. Sync refuses public, missing, malformed, or truncated notebook files before writing. It serializes operations in this tab, preserves edits made while a request is running, and checks for intervening remote changes. Gists have no atomic merge API: avoid simultaneous edits on multiple devices and keep JSON backups.
+- JSON restore merges the backup into the notebook, replacing matching entries (including notes and cached counterparts) and honoring deletion history. It validates the complete file first and saves a pre-restore recovery copy in this browser, available from Settings. It does not delete unrelated current entries. Word import extracts verbs, not a complete notebook backup; use JSON to preserve all fields.
+- Unrecognized Word headings are skipped offline rather than assigned guessed conjugations. AI extraction accepts up to 15,000 characters and reports partial failures. Word/JSON uploads are limited to 10 MB; screenshot selection accepts 10 images, 5 MB each, 20 MB total. Word import supports modern browsers with `DecompressionStream("deflate-raw")`.
+- If browser storage is full, download a JSON backup immediately. Clearing site data removes the notebook, local recovery copy, credentials, and offline cache.
+
+## Development checks
+
+The app remains a zero-build static site. Node dependencies are only for development tests:
+
+```sh
+npm ci
+npm test
+npx playwright install chromium
+npm run test:browser
+```
+
+Tests use synthetic notebooks and mocked GitHub/Gemini calls; they do not access real user data. Browser checks cover desktop/mobile viewport flows, keyboard focus, automated accessibility rules, and offline reload. Real-device Safari, live provider quotas, and Microsoft Word page layout still require manual verification.
+
+Changes are developed on a separate branch and reviewed through a pull request. Revert a merged change with `git revert <commit>`; code rollback does not undo remote data writes. To recover Gist data, consult its revision history and your JSON backups before syncing again.

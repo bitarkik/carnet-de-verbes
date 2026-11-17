@@ -1,0 +1,13 @@
+{
+  "name": "carnet-de-verbes",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "test:browser": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.1",
+    "@axe-core/playwright": "^4.11.0"
+  }
+}
