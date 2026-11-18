@@ -1,4 +1,4 @@
-import { validateState } from "./validation.js?v=26";
+import { validateState } from "./validation.js?v=27";
 // ==========================================================================
 // Local Auto-Save + 2-Way GitHub Gist Cloud Sync (Phone <-> Laptop)
 // ==========================================================================
@@ -130,6 +130,21 @@ async function findExistingSyncGist(token) {
   return null;
 }
 
+async function readGistFile(file) {
+  if (!file) throw new Error("Remote notebook file is missing. Nothing was overwritten.");
+  if (!file.truncated && typeof file.content === "string") return file.content;
+  let url;
+  try { url = new URL(file.raw_url); } catch { throw new Error("Remote notebook download URL is missing. Nothing was overwritten."); }
+  if (url.protocol !== "https:" || url.hostname !== "gist.githubusercontent.com" || url.username || url.password)
+    throw new Error("Unexpected notebook download host. Nothing was overwritten.");
+  // Secret Gist raw URLs are readable without sending the user's API token.
+  const response = await fetch(url.href, { cache: "no-store", credentials: "omit", signal: AbortSignal.timeout(30000) });
+  if (!response.ok) throw new Error(`Full notebook download failed (${response.status}). Nothing was overwritten.`);
+  const content = await response.text();
+  if (content.length > 20 * 1024 * 1024) throw new Error("Remote notebook exceeds the 20 MB safety limit. Nothing was overwritten.");
+  return content;
+}
+
 export async function syncWithGitHubGist(localState, settings) {
   localState = validateState(localState);
   const token = (settings.githubToken || "").trim();
@@ -164,24 +179,22 @@ export async function syncWithGitHubGist(localState, settings) {
   const gist = await ghFetch(`/gists/${gistId}`, token);
   const fileObj = gist.files?.[GIST_FILENAME];
   if (gist.public) throw new Error("Sync requires a secret Gist. Nothing was overwritten.");
-  if (!fileObj || fileObj.truncated || typeof fileObj.content !== "string") {
-    throw new Error("Remote notebook is missing or truncated. Nothing was overwritten; download a backup from GitHub.");
-  }
+  const remoteContent = await readGistFile(fileObj);
   let remoteState;
-  try { remoteState = validateState(JSON.parse(fileObj.content)); }
+  try { remoteState = validateState(JSON.parse(remoteContent)); }
   catch (error) { throw new Error(`Remote notebook is invalid. Nothing was overwritten. ${error.message}`); }
 
   const merged = mergeNotebookStates(localState, remoteState);
   const files = { [GIST_FILENAME]: { content: JSON.stringify(merged, null, 2) } };
-  try { validateState(JSON.parse(fileObj.content), { legacy: false }); }
+  try { validateState(JSON.parse(remoteContent), { legacy: false }); }
   catch {
     const backupName = "carnet-de-verbes-before-compatibility.json";
-    if (!gist.files[backupName]) files[backupName] = { content: fileObj.content };
+    if (!gist.files[backupName]) files[backupName] = { content: remoteContent };
   }
 
   // Detect intervening remote edits; GitHub Gists do not provide an atomic merge API.
   const latest = await ghFetch(`/gists/${gistId}`, token);
-  if (latest.files?.[GIST_FILENAME]?.content !== fileObj.content || latest.files?.[GIST_FILENAME]?.truncated) {
+  if (latest.public || await readGistFile(latest.files?.[GIST_FILENAME]) !== remoteContent) {
     throw new Error("Notebook changed on another device. Retry sync to merge the latest changes.");
   }
   await ghFetch(`/gists/${gistId}`, token, {

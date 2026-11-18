@@ -1,16 +1,17 @@
 const CACHE_PREFIX = `carnet-de-verbes-${encodeURIComponent(self.registration.scope)}-v`;
-const CACHE_NAME = `${CACHE_PREFIX}26`;
+const CACHE_NAME = `${CACHE_PREFIX}27`;
 const CORE_ASSETS = [
   "./",
   "./index.html",
-  "./css/styles.css?v=26",
-  "./js/app.js?v=26",
-  "./js/french-engine.js?v=26",
-  "./js/ai.js?v=26",
-  "./js/word-io.js?v=26",
-  "./js/sync.js?v=26",
-  "./js/practice.js?v=26",
-  "./js/validation.js?v=26",
+  "./js/updates.js?v=27",
+  "./css/styles.css?v=27",
+  "./js/app.js?v=27",
+  "./js/french-engine.js?v=27",
+  "./js/ai.js?v=27",
+  "./js/word-io.js?v=27",
+  "./js/sync.js?v=27",
+  "./js/practice.js?v=27",
+  "./js/validation.js?v=27",
   "./assets/icon.svg",
   "./assets/icon-180.png",
   "./assets/icon-192.png",
@@ -51,7 +52,15 @@ self.addEventListener("fetch", (event) => {
   // Versioned assets are immutable; serve cached assets immediately offline.
   if (!url.pathname.startsWith(new URL(self.registration.scope).pathname)) return;
   event.respondWith((async () => {
-    const cached = await caches.match(event.request);
+    const cache = await caches.open(CACHE_NAME);
+    const cached = await cache.match(event.request);
+    if (event.request.mode === "navigate") {
+      try {
+        const fresh = await fetch(event.request, { cache: "no-store", signal: AbortSignal.timeout(5000) });
+        if (fresh.ok) { await cache.put(event.request, fresh.clone()); return fresh; }
+      } catch { /* Fall back to the current app shell offline. */ }
+      return cached || await cache.match("./index.html") || Response.error();
+    }
     if (cached) return cached;
     const response = await fetch(event.request);
     if (response.ok) {

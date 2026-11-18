@@ -116,3 +116,24 @@ test("sync recovers all 160 remote entries into a 69-entry client and retains ex
   assert.equal(patch.files["carnet-de-verbes-before-compatibility.json"].content,raw);
   assert.equal(JSON.parse(patch.files["carnet-de-verbes-sync.json"].content).verbs.length,160);
 });
+
+test("truncated Gist preview downloads full notebook before merge and conflict check",async()=>{
+ const remote=legacyNotebook();let writes=0,rawReads=0;
+ const content=JSON.stringify(remote);
+ globalThis.fetch=async(url,options={})=>{
+  if(String(url).startsWith("https://gist.githubusercontent.com/")){rawReads++;assert.equal(options.headers,undefined);return {ok:true,text:async()=>content};}
+  if(options.method==="PATCH"){writes++;assert.equal(JSON.parse(JSON.parse(options.body).files["carnet-de-verbes-sync.json"].content).verbs.length,160);return {ok:true,json:async()=>({})};}
+  return {ok:true,json:async()=>({files:{"carnet-de-verbes-sync.json":{truncated:true,content:content.slice(0,100),raw_url:"https://gist.githubusercontent.com/test/id/raw/version/notebook.json"}}})};
+ };
+ const result=await syncWithGitHubGist({verbs:remote.verbs.slice(0,69),tombstones:{}},{githubToken:"mock",gistId:"id"});
+ assert.equal(result.merged.verbs.length,160);assert.equal(writes,1);assert.equal(rawReads,2);
+});
+test("failed full Gist download never writes",async()=>{
+ let writes=0;
+ globalThis.fetch=async(url,options={})=>{
+  if(options.method==="PATCH")writes++;
+  if(String(url).startsWith("https://gist.githubusercontent.com/"))return {ok:false,status:503};
+  return {ok:true,json:async()=>({files:{"carnet-de-verbes-sync.json":{truncated:true,raw_url:"https://gist.githubusercontent.com/test/id/raw/version/notebook.json"}}})};
+ };
+ await assert.rejects(syncWithGitHubGist({verbs:[],tombstones:{}},{githubToken:"mock",gistId:"id"}),/download failed/);assert.equal(writes,0);
+});

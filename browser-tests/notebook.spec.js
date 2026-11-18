@@ -115,3 +115,13 @@ test("legacy 160-entry notebook remains accessible after upgrade",async({page})=
   await page.getByRole("button",{name:"Download original recovery copy"}).click();
   expect((await download).suggestedFilename()).toBe("carnet-de-verbes-before-restore.json");
 });
+
+test("recovery page updates worker and preserves saved notebook",async({page})=>{
+ await page.goto("/");await expect(page.locator("html")).toHaveAttribute("data-ready","true");
+ await page.getByRole("button",{name:"Load 3 Starter Verbs"}).click();
+ const original=await page.evaluate(key=>localStorage.getItem(key),stateKey);
+ await page.goto("/recover.html");
+ await page.getByRole("button",{name:"Update and open notebook"}).click();
+ await expect(page.locator("#verb-count-label")).toHaveText("3 verbs saved");
+ expect(await page.evaluate(key=>localStorage.getItem(key),stateKey)).toBe(original);
+});

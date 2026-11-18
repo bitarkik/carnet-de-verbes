@@ -1,0 +1,17 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Update French Verb Notebook</title><body><h1>Update French Verb Notebook</h1><p id="status">Updating the app. Your saved notebook and credentials will be kept.</p><button id="download">Download saved notebook first</button><button id="update">Update and open notebook</button><script>
+const status = document.getElementById("status");
+document.getElementById("download").onclick = () => {
+ const raw = localStorage.getItem("carnet_de_verbes_state_v1");
+ if (!raw) { status.textContent = "No saved notebook in this browser. Use the browser where you normally open the app."; return; }
+ const url=URL.createObjectURL(new Blob([raw],{type:"application/json"}));const a=document.createElement("a");a.href=url;a.download="carnet-de-verbes-original.json";a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);
+};
+document.getElementById("update").onclick = async () => {
+ try {
+  const reg=await navigator.serviceWorker.register("./sw.js?v=27",{updateViaCache:"none"});
+  await reg.update();
+  const worker=reg.installing || reg.waiting;
+  if(worker && worker.state!=="activated") await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error("Update is taking longer than expected. Try again while online.")),30000);worker.addEventListener("statechange",()=>{if(worker.state==="activated"){clearTimeout(timer);resolve();}if(worker.state==="redundant"){clearTimeout(timer);reject(Error("Update failed; try again."));}});});
+  location.replace("./?updated=27");
+ } catch(e){status.textContent=e.message;}
+};
+</script></body></html>
