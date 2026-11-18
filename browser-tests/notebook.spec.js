@@ -6,8 +6,8 @@ test.beforeEach(async ({page}) => { page.on("pageerror", error => console.log("P
 test("add, persist, backup restore notes, delete and undo",async({page})=>{
   const errors=[];page.on("pageerror",e=>errors.push(e.message));
   await page.goto("/"); await expect(page.locator("html")).toHaveAttribute("data-ready","true");
-  await page.getByRole("textbox",{name:"French verb",exact:true}).fill("elle est");
-  await page.getByRole("button",{name:"Add",exact:true}).click();
+  await page.getByRole("searchbox",{name:"French verb",exact:true}).fill("elle est");
+  await page.getByRole("searchbox",{name:"French verb",exact:true}).press("Enter");
   await expect(page.getByRole("button",{name:"être",exact:true})).toBeVisible();
   await page.getByRole("textbox",{name:"Note for être"}).fill("original note");
   await page.reload();

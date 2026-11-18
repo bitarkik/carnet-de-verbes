@@ -1358,3 +1358,8 @@ textarea:focus {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* Keep the verb lookup clear control from overlapping the screenshot button. */
+#quick-add-input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}

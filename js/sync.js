@@ -1,4 +1,4 @@
-import { validateState } from "./validation.js?v=27";
+import { validateState } from "./validation.js?v=28";
 // ==========================================================================
 // Local Auto-Save + 2-Way GitHub Gist Cloud Sync (Phone <-> Laptop)
 // ==========================================================================
