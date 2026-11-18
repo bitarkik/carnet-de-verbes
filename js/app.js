@@ -1,4 +1,4 @@
-import { validateVerb, validateState } from "./validation.js?v=28";
+import { validateVerb, validateState } from "./validation.js?v=29";
 // ==========================================================================
 // Carnet de Verbes — Clean Accordion Notebook Controller (Muse-Inspired)
 // ==========================================================================
@@ -9,16 +9,16 @@ import {
   stripAccents,
   normalizeVerbEntry,
   getReflexiveCounterpart
-} from "./french-engine.js?v=28";
+} from "./french-engine.js?v=29";
 import {
   testGeminiKey,
   lookupVerbWithAI,
   extractVerbsFromScreenshots,
   extractVerbsFromWordTextWithAI
-} from "./ai.js?v=28";
-import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=28";
-import { loadLocalState, saveLocalState, loadSettings, saveSettings as writeSettings, syncWithGitHubGist, mergeNotebookStates } from "./sync.js?v=28";
-import { createPracticeController } from "./practice.js?v=28";
+} from "./ai.js?v=29";
+import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=29";
+import { loadLocalState, saveLocalState, loadSettings, saveSettings as writeSettings, syncWithGitHubGist, mergeNotebookStates } from "./sync.js?v=29";
+import { createPracticeController } from "./practice.js?v=29";
 
 const TENSES = [
   { key: "present", label: "Présent" },
@@ -1312,7 +1312,7 @@ function init() {
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register("./sw.js?v=28")
+        .register("./sw.js?v=29")
         .then((reg) => {
           reg.update().catch(() => {});
           // Listen for updates and automatically refresh if new version found

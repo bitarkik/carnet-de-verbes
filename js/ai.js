@@ -1,9 +1,9 @@
-import { validateVerb } from "./validation.js?v=28";
+import { validateVerb } from "./validation.js?v=29";
 // ==========================================================================
 // Live Google Gemini AI Integration (Verb Lookup, Screenshot Vision, Word Import)
 // ==========================================================================
 
-import { normalizeVerbEntry } from "./french-engine.js?v=28";
+import { normalizeVerbEntry, stripAccents } from "./french-engine.js?v=29";
 
 // Documented Gemini models; availability and quotas depend on the account.
 const MODELS = [
@@ -192,7 +192,7 @@ function checkedAIVerb(raw) {
   const usesEtre = v.auxiliary === "être";
   for (const form of v.tenses.passeCompose) {
     if (form.startsWith("—")) continue;
-    const etreForm = /\b(suis|es|est|sommes|êtes|sont)\b/.test(form);
+    const etreForm = /\b(suis|es|est|sommes|etes|sont)\b/.test(stripAccents(form));
     if (etreForm !== usesEtre) throw new Error("AI returned inconsistent auxiliary and conjugations. Please retry.");
     if (v.isReflexive && !/\b(me|te|se|nous|vous)\b|[mts]'/i.test(form)) throw new Error("AI omitted a reflexive pronoun. Please retry.");
   }

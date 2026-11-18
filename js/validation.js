@@ -21,11 +21,18 @@ export function validateVerb(v, depth = 0, { legacy = false } = {}) {
   if (v.duolingoTips !== undefined && (!object(v.duolingoTips) || !Object.values(v.duolingoTips).every(text))) throw new Error("Invalid grammar tips.");
   if (v.examples !== undefined && (!Array.isArray(v.examples) || !v.examples.every(e => object(e) && text(e.fr) && text(e.en)))) throw new Error("Invalid examples.");
   if (v.quiz !== undefined && (!object(v.quiz) || !["sentence", "answer", "tense", "en"].every(k => text(v.quiz[k])) || !v.quiz.sentence.includes("____") || (v.quiz.altAnswers !== undefined && (!Array.isArray(v.quiz.altAnswers) || !v.quiz.altAnswers.every(text))) || (v.quiz.explanation !== undefined && !text(v.quiz.explanation)))) throw new Error("Invalid practice question.");
-  if (v.counterpartData !== undefined) {
-    if (depth >= 1) throw new Error("Nested counterpart data is unsupported.");
-    validateVerb(v.counterpartData, depth + 1, { legacy });
+  if (v.counterpartData === undefined) return structuredClone(v);
+
+  const { counterpartData, ...entry } = v;
+  if (depth >= 1) {
+    if (!legacy) throw new Error("Nested counterpart data is unsupported.");
+    // Older notebooks can contain a cached copy of the original verb inside its counterpart.
+    return structuredClone(entry);
   }
-  return structuredClone(v);
+  return {
+    ...structuredClone(entry),
+    counterpartData: validateVerb(counterpartData, depth + 1, { legacy })
+  };
 }
 export function validateState(value, { legacy = true } = {}) {
   if (Array.isArray(value)) value = { verbs: value, tombstones: {} };

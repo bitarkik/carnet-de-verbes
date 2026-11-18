@@ -55,6 +55,24 @@ test("storage failure is surfaced and corrupted notebook is not reset",()=>{
   assert.throws(()=>loadLocalState(),/could not be read/);
   assert.throws(()=>saveLocalState([]),/could not be saved/);
 });
+test("startup keeps the first counterpart, drops deeper copies, and preserves the original", () => {
+  const counterpart = {...lookupOfflineVerb("se rendre").verb, note: "Keep this counterpart note"};
+  const entry = {...OFFLINE_DICTIONARY.rendre, note: "Keep this verb note"};
+  const original = {
+    verbs: [{...entry, counterpartData: {...counterpart, counterpartData: entry}}, verb()],
+    tombstones: {boire: 42}
+  };
+  const raw = JSON.stringify(original);
+  globalThis.localStorage = storage();
+  localStorage.setItem("carnet_de_verbes_state_v1", raw);
+
+  assert.deepEqual(loadLocalState(), {
+    verbs: [{...entry, counterpartData: counterpart}, verb()],
+    tombstones: original.tombstones
+  });
+  assert.equal(localStorage.getItem("carnet_de_verbes_state_v1"), raw);
+  assert.equal(localStorage.getItem("carnet_de_verbes_before_compatibility"), raw);
+});
 test("credentials are session-only unless explicitly remembered",()=>{
   globalThis.localStorage=storage();globalThis.sessionStorage=storage();
   saveSettings({geminiKey:"test-key",githubToken:"test-token",rememberCredentials:false});
@@ -80,6 +98,21 @@ test("Gemini rejects malformed and auxiliary-inconsistent learning entries",asyn
     if(v.tenses) v.infinitive="aller";
     await assert.rejects(lookupVerbWithAI("mock","mock-key"));
   }
+});
+
+test("Gemini accepts a correct aller entry including vous êtes", async (t) => {
+  const {lookupVerbWithAI} = await import("../js/ai.js");
+  const entry = OFFLINE_DICTIONARY.aller;
+  t.mock.method(globalThis, "fetch", async () => ({
+    ok: true,
+    json: async () => ({
+      candidates: [{content: {parts: [{text: JSON.stringify({isValidFrenchVerb: true, verb: entry})}]}}]
+    })
+  }));
+
+  const result = await lookupVerbWithAI("aller", "mock-key");
+  assert.equal(result.ok, true);
+  assert.match(result.verb.tenses.passeCompose[4], /^vous êtes allé/);
 });
 
 function legacyNotebook() {
