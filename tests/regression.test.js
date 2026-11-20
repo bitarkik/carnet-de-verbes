@@ -5,8 +5,8 @@ import { validateVerb, validateState } from "../js/validation.js";
 import { mergeNotebookStates, syncWithGitHubGist, saveLocalState, loadLocalState, saveSettings, loadSettings } from "../js/sync.js";
 import { generateDocxBlob, extractTextFromDocx } from "../js/word-io.js";
 const verb = () => structuredClone(OFFLINE_DICTIONARY.prendre);
-test("all 139 offline entries satisfy external-data schema", () => {
-  assert.equal(Object.keys(OFFLINE_DICTIONARY).length, 139);
+test("all offline entries satisfy external-data schema", () => {
+  assert.equal(Object.keys(OFFLINE_DICTIONARY).length, 141);
   Object.values(OFFLINE_DICTIONARY).forEach(v => validateVerb(v));
 });
 test("individual third-person subjects and reflexives resolve", () => {

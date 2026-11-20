@@ -21,6 +21,28 @@ test("add, persist, backup restore notes, delete and undo",async({page})=>{
   await expect(page.locator("#verb-count-label")).toHaveText("1 verb saved");
   expect(errors).toEqual([]);
 });
+test("dispute and occupe add offline with switchable reflexive forms", async ({page, context}) => {
+  await page.goto("/");
+  await expect(page.locator("html")).toHaveAttribute("data-ready", "true");
+  await context.setOffline(true);
+  const input = page.getByRole("searchbox", {name: "French verb", exact: true});
+
+  for (const [typed, base, reflexive, vousForm] of [
+    ["dispute", "disputer", "se disputer", "vous vous êtes disputé(e)(s)*"],
+    ["occupe", "occuper", "s'occuper", "vous vous êtes occupé(e)(s)*"]
+  ]) {
+    await input.fill(typed);
+    await input.press("Enter");
+    const card = page.locator(`[data-card-inf="${base}"]`);
+    await expect(card.getByRole("heading", {name: base, exact: true})).toBeVisible();
+    await card.getByRole("button", {name: reflexive, exact: true}).click();
+    await expect(card.getByRole("heading", {name: reflexive, exact: true})).toBeVisible();
+    await card.getByRole("button", {name: "Passé composé", exact: true}).click();
+    await expect(card.locator(`[data-speak="${vousForm}"]`)).toBeVisible();
+  }
+
+  await expect(page.locator("#verb-count-label")).toHaveText("2 verbs saved");
+});
 test("flashcard front, reveal and audio use the same shuffled verb",async({page})=>{
   await page.addInitScript(({stateKey,verbs})=>{localStorage.setItem(stateKey,JSON.stringify({verbs,tombstones:{}})); Math.random=()=>0;},{stateKey,verbs:[OFFLINE_DICTIONARY.prendre,OFFLINE_DICTIONARY.boire]});
   await page.goto("/"); await expect(page.locator("html")).toHaveAttribute("data-ready","true");

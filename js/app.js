@@ -1,4 +1,4 @@
-import { validateVerb, validateState } from "./validation.js?v=29";
+import { validateVerb, validateState } from "./validation.js?v=30";
 // ==========================================================================
 // Carnet de Verbes — Clean Accordion Notebook Controller (Muse-Inspired)
 // ==========================================================================
@@ -9,16 +9,16 @@ import {
   stripAccents,
   normalizeVerbEntry,
   getReflexiveCounterpart
-} from "./french-engine.js?v=29";
+} from "./french-engine.js?v=30";
 import {
   testGeminiKey,
   lookupVerbWithAI,
   extractVerbsFromScreenshots,
   extractVerbsFromWordTextWithAI
-} from "./ai.js?v=29";
-import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=29";
-import { loadLocalState, saveLocalState, loadSettings, saveSettings as writeSettings, syncWithGitHubGist, mergeNotebookStates } from "./sync.js?v=29";
-import { createPracticeController } from "./practice.js?v=29";
+} from "./ai.js?v=30";
+import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=30";
+import { loadLocalState, saveLocalState, loadSettings, saveSettings as writeSettings, syncWithGitHubGist, mergeNotebookStates } from "./sync.js?v=30";
+import { createPracticeController } from "./practice.js?v=30";
 
 const TENSES = [
   { key: "present", label: "Présent" },
@@ -331,7 +331,7 @@ async function handleAddVerb(rawText) {
       return;
     }
 
-    // 1. Instant offline validated check (140 core verbs)
+    // 1. Look up the verb in the offline dictionary
     const offline = lookupOfflineVerb(trimmed);
     if (offline.ok) {
       if (trimmed.split(/\s+/).length >= 3) {
@@ -1312,7 +1312,7 @@ function init() {
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register("./sw.js?v=29")
+        .register("./sw.js?v=30")
         .then((reg) => {
           reg.update().catch(() => {});
           // Listen for updates and automatically refresh if new version found

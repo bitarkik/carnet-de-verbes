@@ -694,6 +694,14 @@ const SPECS = {
   "écouter": { m: "to listen to", tipPrep: "No 'à'! 'J'écoute un podcast' = I listen TO a podcast.", ex: ["J'écoute la radio dans la voiture.", "I listen to the radio in the car."] },
   "marcher": { m: "to walk / to work (function)", tipExtra: "'Ça marche !' is super common in French for 'That works / Sounds good!'", ex: ["Nous marchons le long de la rivière.", "We walk along the river."] },
   "cuisiner": { m: "to cook", ex: ["J'aime cuisiner pour mes amis.", "I love cooking for my friends."] },
+  "disputer": {
+    m: "to contest / to scold (informal)",
+    ex: ["Les deux équipes disputent la finale.", "The two teams are playing in the final."]
+  },
+  "occuper": {
+    m: "to occupy / to take up / to keep busy",
+    ex: ["Ce meuble occupe trop de place.", "This piece of furniture takes up too much space."]
+  },
   "demander": { m: "to ask (for)", tipPrep: "demander À qqn DE faire qqch.", ex: ["Je vais demander l'addition.", "I'm going to ask for the bill."] },
   "donner": { m: "to give", ex: ["Peux-tu me donner un coup de main ?", "Can you give me a hand?"] },
   "trouver": { m: "to find", ex: ["J'ai enfin trouvé mon passeport !", "I finally found my passport!"] },
@@ -807,6 +815,11 @@ const REFLEXIVE_INFO = {
   "se retrouver": { m: "to meet up / to find oneself", ex: ["On se retrouve au café ?", "Shall we meet at the café?"] },
   "se marier": { m: "to get married", ex: ["Ils se marient en juin.", "They're getting married in June."] },
   "s'inquiéter": { m: "to worry", ex: ["Ne t'inquiète pas.", "Don't worry."] },
+  "se disputer": {
+    m: "to argue / to quarrel",
+    tipPrep: "se disputer avec quelqu'un = to argue with someone.",
+    ex: ["Elle se dispute souvent avec son frère.", "She often argues with her brother."]
+  },
   "s'occuper": { m: "to take care of / to look after", tipPrep: "s'occuper de qqch / qqn.", ex: ["Je m'occupe des enfants.", "I'm looking after the children."] },
   "se baigner": { m: "to go swimming / to bathe", ex: ["On se baigne dans le lac.", "We swim in the lake."] },
   "se blesser": { m: "to hurt oneself", ex: ["Il s'est blessé au genou.", "He hurt his knee."] },
@@ -1170,6 +1183,7 @@ const REFLEXIVE_TWINS = {
   "marier": "se marier",
   "maquiller": "se maquiller",
   "mettre": "se mettre",
+  "disputer": "se disputer",
   "occuper": "s'occuper",
   "perdre": "se perdre",
   "plaindre": "se plaindre",
