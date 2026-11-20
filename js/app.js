@@ -1,4 +1,4 @@
-import { validateVerb, validateState } from "./validation.js?v=31";
+import { validateVerb, validateState } from "./validation.js?v=32";
 // ==========================================================================
 // Carnet de Verbes — Clean Accordion Notebook Controller (Muse-Inspired)
 // ==========================================================================
@@ -11,16 +11,16 @@ import {
   getReflexiveCounterpart,
   areVerbCounterparts,
   isReflexiveOnly
-} from "./french-engine.js?v=31";
+} from "./french-engine.js?v=32";
 import {
   testGeminiKey,
   lookupVerbWithAI,
   extractVerbsFromScreenshots,
   extractVerbsFromWordTextWithAI
-} from "./ai.js?v=31";
-import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=31";
-import { loadLocalState, saveLocalState, loadSettings, saveSettings as writeSettings, syncWithGitHubGist, mergeNotebookStates } from "./sync.js?v=31";
-import { createPracticeController } from "./practice.js?v=31";
+} from "./ai.js?v=32";
+import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=32";
+import { loadLocalState, saveLocalState, loadSettings, saveSettings as writeSettings, syncWithGitHubGist, mergeNotebookStates } from "./sync.js?v=32";
+import { createPracticeController } from "./practice.js?v=32";
 
 const TENSES = [
   { key: "present", label: "Présent" },
@@ -329,15 +329,6 @@ async function handleAddVerb(rawText) {
     searchInput.value = "";
   }
 
-  const scrollToVerb = (infinitive) => {
-    requestAnimationFrame(() => {
-      const card = document.querySelector(`[data-card-inf="${CSS.escape(infinitive)}"]`);
-      if (card) {
-        card.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-    });
-  };
-
   try {
     // Match saved entries before looking up new conjugations.
     const cleanLower = trimmed.toLowerCase().replace(/’/g, "'").trim();
@@ -411,19 +402,37 @@ async function handleAddVerb(rawText) {
     if (card.infinitive === selected.infinitive) delete activeVariantMap[card.infinitive];
     else activeVariantMap[card.infinitive] = selected.infinitive;
     render();
-    scrollToVerb(card.infinitive);
 
     const pair = savedCounterpart(card);
     const status = pair ? `Both forms are in your notebook: ${card.infinitive} and ${pair.infinitive}.` :
       alreadyExisted ? `${selected.infinitive} is already in your notebook — opened here.` :
       `${selected.infinitive} added to your notebook ✓`;
     showMsg(result.warning ? `${status} ${result.warning}` : status, {isError: Boolean(result.warning)});
+    const heading = document.querySelector(`[data-accordion="${CSS.escape(card.infinitive)}"]`);
+    heading?.focus({preventScroll: true});
+    requestAnimationFrame(() => {
+      document.querySelector(`[data-card-inf="${CSS.escape(card.infinitive)}"]`)
+        ?.scrollIntoView({block: "start"});
+    });
   } catch (err) {
     showMsg(`AI lookup failed: ${err.message}`, { isError: true });
   } finally {
     submitBtn.disabled = false;
     submitBtn.textContent = "Add";
   }
+}
+
+function confirmDelete(infinitive) {
+  const verb = verbs.find(v => v.infinitive === infinitive);
+  if (!verb) return;
+  const dialog = $("delete-verb-dialog");
+  const counterpart = savedCounterpart(verb);
+  $("delete-verb-description").textContent = counterpart
+    ? `Delete “${verb.infinitive}” and “${counterpart.infinitive}” from your notebook?`
+    : `Delete “${verb.infinitive}” from your notebook?`;
+  dialog.dataset.infinitive = infinitive;
+  dialog.returnValue = "";
+  dialog.showModal();
 }
 
 function deleteVerb(infinitive) {
@@ -844,7 +853,7 @@ function render() {
   container.querySelectorAll("[data-del]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      deleteVerb(btn.dataset.del);
+      confirmDelete(btn.dataset.del);
     });
   });
 }
@@ -1028,7 +1037,7 @@ async function runCloudSync({ quiet = false } = {}) {
       clearTimeout(syncTimer);
       syncTimer = setTimeout(() => runCloudSync({ quiet: true }), 1500);
     }
-    if (!openVerbId && verbs.length) openVerbId = verbs[0].infinitive;
+    if (openVerbId && !verbs.some(v => v.infinitive === openVerbId)) openVerbId = null;
 
     settings.gistId = gistId;
     settings.lastSyncedAt = Date.now();
@@ -1157,6 +1166,10 @@ function init() {
 
   // Undo button
   $("status-undo-btn").addEventListener("click", undoDelete);
+  const deleteDialog = $("delete-verb-dialog");
+  deleteDialog.addEventListener("close", () => {
+    if (deleteDialog.returnValue === "delete") deleteVerb(deleteDialog.dataset.infinitive);
+  });
 
   // Search & Sort Toolbar
   $("search-input").addEventListener("input", render);
@@ -1312,7 +1325,7 @@ function init() {
 
   // Keyboard shortcut Esc
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
+    if (e.key === "Escape" && !deleteDialog.open) {
       closeDrawer();
       closeScreenshotModal();
       $("quick-export-menu")?.classList.add("hidden");
@@ -1345,7 +1358,7 @@ function init() {
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register("./sw.js?v=31")
+        .register("./sw.js?v=32")
         .then((reg) => {
           reg.update().catch(() => {});
           // Listen for updates and automatically refresh if new version found

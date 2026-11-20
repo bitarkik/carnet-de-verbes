@@ -12,7 +12,7 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./assets/icon-192.png" />
   <link rel="apple-touch-icon" href="./assets/icon-180.png" />
   <link rel="manifest" href="./manifest.webmanifest" />
-  <link rel="stylesheet" href="./css/styles.css?v=31" />
+  <link rel="stylesheet" href="./css/styles.css?v=32" />
 </head>
 <body>
   <div class="wrap">
@@ -295,6 +295,17 @@
     </div>
   </aside>
 
+  <dialog id="delete-verb-dialog" class="modal-card" aria-labelledby="delete-verb-title" aria-describedby="delete-verb-description">
+    <div class="modal-head"><h2 id="delete-verb-title">Delete verb?</h2></div>
+    <form method="dialog" class="modal-body">
+      <p id="delete-verb-description"></p>
+      <div class="card-actions-row">
+        <button type="submit" value="cancel" class="add-btn small" autofocus>Cancel</button>
+        <button type="submit" value="delete" class="danger-btn">Delete verb</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Screenshot OCR Modal -->
   <div id="screenshot-modal" role="dialog" aria-modal="true" aria-label="Add from screenshot" class="modal-backdrop hidden">
     <div class="modal-card">
@@ -323,7 +334,7 @@
   <input id="import-docx-file-input" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="hidden" />
   <input id="import-json-file-input" type="file" accept=".json,application/json" class="hidden" />
 
-  <script src="./js/updates.js?v=31"></script>
-  <script type="module" src="./js/app.js?v=31"></script>
+  <script src="./js/updates.js?v=32"></script>
+  <script type="module" src="./js/app.js?v=32"></script>
 </body>
 </html>

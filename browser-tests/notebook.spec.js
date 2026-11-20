@@ -15,12 +15,71 @@ test("add, persist, backup restore notes, delete and undo",async({page})=>{
   const backup={verbs:[{...OFFLINE_DICTIONARY['être'],note:"restored note"}],tombstones:{}};
   await page.locator("#import-json-file-input").setInputFiles({name:"backup.json",mimeType:"application/json",buffer:Buffer.from(JSON.stringify(backup))});
   await expect(page.getByRole("textbox",{name:"Note for être"})).toHaveValue("restored note");
-  await page.getByRole("button",{name:"Delete verb"}).click();
+  const deleteButton = page.getByRole("button", {name: "Delete verb", exact: true});
+  const confirmation = page.getByRole("dialog", {name: "Delete verb?"});
+  await deleteButton.click();
+  await expect(confirmation).toContainText("être");
+  await expect(confirmation.getByRole("button", {name: "Cancel"})).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(confirmation).toBeHidden();
+  await expect(deleteButton).toBeFocused();
+  await deleteButton.click();
+  await confirmation.getByRole("button", {name: "Cancel"}).click();
+  await expect(page.locator("#verb-count-label")).toHaveText("1 verb saved");
+  await deleteButton.click();
+  await confirmation.getByRole("button", {name: "Delete verb"}).click();
   await expect(page.locator("#verb-count-label")).toHaveText("0 verbs saved");
   await page.getByRole("button",{name:"Undo",exact:true}).click();
   await expect(page.locator("#verb-count-label")).toHaveText("1 verb saved");
   expect(errors).toEqual([]);
 });
+test("a closed added card stays closed when sync finishes and the message disappears", async ({page}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("carnet_de_verbes_settings_v1", JSON.stringify({
+      gistId: "mock-gist", githubToken: "mock-token", rememberCredentials: true
+    }));
+  });
+  let releaseSync;
+  const syncGate = new Promise(resolve => { releaseSync = resolve; });
+  await page.route("https://api.github.com/gists/mock-gist", async route => {
+    await syncGate;
+    await route.fulfill({json: {public: false, files: {
+      "carnet-de-verbes-sync.json": {content: JSON.stringify({verbs: [], tombstones: {}})}
+    }}});
+  });
+  await page.goto("/");
+  await expect(page.locator("html")).toHaveAttribute("data-ready", "true");
+  const input = page.getByRole("searchbox", {name: "French verb", exact: true});
+  await input.fill("prendre");
+  await input.press("Enter");
+  const heading = page.getByRole("button", {name: "prendre", exact: true});
+  await expect(heading).toHaveAttribute("aria-expanded", "true");
+  await heading.click();
+  await expect(heading).toHaveAttribute("aria-expanded", "false");
+  releaseSync();
+  await expect(page.locator("#drawer-sync-status")).toContainText("Last synced:");
+  await expect(page.locator("#status-msg")).toBeHidden({timeout: 6500});
+  await expect(heading).toHaveAttribute("aria-expanded", "false");
+});
+
+test("adding a saved verb brings its entire header into view", async ({page}) => {
+  const verbs = Object.values(OFFLINE_DICTIONARY).slice(0, 18);
+  const target = verbs[9].infinitive;
+  await page.addInitScript(({stateKey, verbs}) => {
+    localStorage.setItem(stateKey, JSON.stringify({verbs, tombstones: {}}));
+  }, {stateKey, verbs});
+  await page.goto("/");
+  await expect(page.locator("html")).toHaveAttribute("data-ready", "true");
+  const input = page.getByRole("searchbox", {name: "French verb", exact: true});
+  await input.fill(target);
+  await input.press("Enter");
+  await expect(page.locator("#status-msg-text")).toContainText("already in your notebook");
+  await expect(page.locator("#status-msg")).toBeHidden({timeout: 6500});
+  const card = page.locator(`[data-card-inf="${target}"]`);
+  await expect(card.locator(".card-head")).toBeInViewport({ratio: 1});
+  await expect(card.getByRole("button", {name: target, exact: true})).toHaveAttribute("aria-expanded", "true");
+});
+
 test("dispute and occupe add offline with switchable reflexive forms", async ({page, context}) => {
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("data-ready", "true");

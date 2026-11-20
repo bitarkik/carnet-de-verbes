@@ -470,6 +470,10 @@ textarea:focus {
   gap: 12px;
 }
 
+#verb-list-container .card {
+  scroll-margin-top: 12px;
+}
+
 .card {
   background: var(--bg-card);
   border: 1.5px solid var(--border);
@@ -1222,6 +1226,21 @@ textarea:focus {
   width: 100%;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16);
   overflow: hidden;
+}
+
+#delete-verb-dialog {
+  width: calc(100% - 32px);
+  padding: 0;
+  color: var(--text-primary);
+}
+
+#delete-verb-dialog::backdrop {
+  background: var(--bg-backdrop);
+}
+
+#delete-verb-description {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .modal-head {
