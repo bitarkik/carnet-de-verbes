@@ -115,6 +115,30 @@ test("Gemini accepts a correct aller entry including vous êtes", async (t) => {
   assert.match(result.verb.tenses.passeCompose[4], /^vous êtes allé/);
 });
 
+test("offline lookup recognizes reflexive-only infinitives without generating a bare form", () => {
+  for (const input of ["souvenir", "se souvenir", "mefier", "se méfier"]) {
+    const result = lookupOfflineVerb(input);
+    assert.equal(result.ok, true);
+    assert.match(result.verb.infinitive, /^se /);
+  }
+  assert.equal(lookupOfflineVerb("se être").ok, false);
+});
+
+test("Gemini refuses unrelated or omitted counterparts when discovering both forms", async (t) => {
+  const {lookupVerbWithAI} = await import("../js/ai.js");
+  const result = {isValidFrenchVerb: true, verb: OFFLINE_DICTIONARY.disputer};
+  t.mock.method(globalThis, "fetch", async () => ({
+    ok: true,
+    json: async () => ({
+      candidates: [{content: {parts: [{text: JSON.stringify(result)}]}}]
+    })
+  }));
+  const options = {includeCounterpart: true};
+  await assert.rejects(lookupVerbWithAI("disputer", "test-key", options), /did not finish/);
+  result.counterpart = lookupOfflineVerb("s'occuper").verb;
+  await assert.rejects(lookupVerbWithAI("disputer", "test-key", options), /different verbs/);
+});
+
 function legacyNotebook() {
   const verbs=Object.values(OFFLINE_DICTIONARY).map(v=>({...structuredClone(v),updatedAt:1}));
   while(verbs.length<160) verbs.push({...verb(),infinitive:`legacy-${verbs.length}`,note:`original note ${verbs.length}`,updatedAt:1});

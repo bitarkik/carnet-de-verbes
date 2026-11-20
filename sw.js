@@ -1,17 +1,17 @@
 const CACHE_PREFIX = `carnet-de-verbes-${encodeURIComponent(self.registration.scope)}-v`;
-const CACHE_NAME = `${CACHE_PREFIX}30`;
+const CACHE_NAME = `${CACHE_PREFIX}31`;
 const CORE_ASSETS = [
   "./",
   "./index.html",
-  "./js/updates.js?v=30",
-  "./css/styles.css?v=30",
-  "./js/app.js?v=30",
-  "./js/french-engine.js?v=30",
-  "./js/ai.js?v=30",
-  "./js/word-io.js?v=30",
-  "./js/sync.js?v=30",
-  "./js/practice.js?v=30",
-  "./js/validation.js?v=30",
+  "./js/updates.js?v=31",
+  "./css/styles.css?v=31",
+  "./js/app.js?v=31",
+  "./js/french-engine.js?v=31",
+  "./js/ai.js?v=31",
+  "./js/word-io.js?v=31",
+  "./js/sync.js?v=31",
+  "./js/practice.js?v=31",
+  "./js/validation.js?v=31",
   "./assets/icon.svg",
   "./assets/icon-180.png",
   "./assets/icon-192.png",

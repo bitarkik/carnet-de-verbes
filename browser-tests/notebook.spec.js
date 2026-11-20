@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { OFFLINE_DICTIONARY } from "../js/french-engine.js";
+import { OFFLINE_DICTIONARY, lookupOfflineVerb } from "../js/french-engine.js";
 const stateKey="carnet_de_verbes_state_v1";
 test.beforeEach(async ({page}) => { page.on("pageerror", error => console.log("PAGE ERROR:",error.stack)); });
 test("add, persist, backup restore notes, delete and undo",async({page})=>{
@@ -35,6 +35,9 @@ test("dispute and occupe add offline with switchable reflexive forms", async ({p
     await input.press("Enter");
     const card = page.locator(`[data-card-inf="${base}"]`);
     await expect(card.getByRole("heading", {name: base, exact: true})).toBeVisible();
+    const saved = await page.evaluate(({stateKey, base}) =>
+      JSON.parse(localStorage.getItem(stateKey)).verbs.find(v => v.infinitive === base), {stateKey, base});
+    expect(saved.counterpartData.infinitive).toBe(reflexive);
     await card.getByRole("button", {name: reflexive, exact: true}).click();
     await expect(card.getByRole("heading", {name: reflexive, exact: true})).toBeVisible();
     await card.getByRole("button", {name: "Passé composé", exact: true}).click();
@@ -43,6 +46,73 @@ test("dispute and occupe add offline with switchable reflexive forms", async ({p
 
   await expect(page.locator("#verb-count-label")).toHaveText("2 verbs saved");
 });
+for (const startWithReflexive of [false, true]) {
+  const first = startWithReflexive ? "se réconcilier" : "réconcilier";
+  const second = startWithReflexive ? "réconcilier" : "se réconcilier";
+  test(`Gemini discovers both forms starting from ${first}`, async ({page}) => {
+    await page.addInitScript(() => {
+      sessionStorage.setItem("carnet_de_verbes_settings_v1", JSON.stringify({geminiKey: "test-key"}));
+    });
+    const fixture = (infinitive, template) => ({
+      ...template,
+      infinitive,
+      meaning: template.isReflexive ? "to make up" : "to reconcile",
+      pastParticiple: "réconcilié",
+      tenses: Object.fromEntries(Object.entries(template.tenses).map(([tense, forms]) =>
+        [tense, forms.map(form => form.replaceAll("disput", "réconcili"))]))
+    });
+    const base = fixture("réconcilier", OFFLINE_DICTIONARY.disputer);
+    const reflexive = fixture("se réconcilier", lookupOfflineVerb("se disputer").verb);
+    const onlyReflexive = {
+      ...OFFLINE_DICTIONARY["se souvenir"],
+      infinitive: "s'enfuir",
+      pastParticiple: "enfui",
+      tenses: {
+        ...OFFLINE_DICTIONARY["se souvenir"].tenses,
+        passeCompose: OFFLINE_DICTIONARY["se souvenir"].tenses.passeCompose.map(form => form.replace("souvenu", "enfui"))
+      }
+    };
+    let calls = 0;
+    await page.route("https://generativelanguage.googleapis.com/**", async route => {
+      calls++;
+      const prompt = route.request().postDataJSON().contents[0].parts[0].text;
+      const isOnlyReflexive = prompt.includes(`Analyze the user's input: "enfuir"`);
+      const result = isOnlyReflexive ? {verb: onlyReflexive, counterpart: null} : {
+        verb: startWithReflexive ? reflexive : base,
+        counterpart: startWithReflexive ? base : reflexive
+      };
+      await route.fulfill({json: {candidates: [{content: {parts: [{
+        text: JSON.stringify({isValidFrenchVerb: true, ...result})
+      }]}}]}});
+    });
+    const input = page.getByRole("searchbox", {name: "French verb", exact: true});
+    const add = async value => { await input.fill(value); await input.press("Enter"); };
+
+    await page.goto("/");
+    await expect(page.locator("html")).toHaveAttribute("data-ready", "true");
+    await add(first);
+    await expect(page.getByRole("heading", {name: first, exact: true})).toBeVisible();
+    await expect(page.locator("#verb-count-label")).toHaveText("1 verb saved");
+    expect(calls).toBe(1);
+    await page.getByRole("textbox", {name: `Note for ${first}`}).fill("Keep my note");
+
+    await page.reload();
+    await expect(page.locator("html")).toHaveAttribute("data-ready", "true");
+    await add(second);
+    await expect(page.getByRole("heading", {name: second, exact: true})).toBeVisible();
+    await expect(page.getByRole("textbox", {name: `Note for ${first}`})).toHaveValue("Keep my note");
+    await expect(page.locator("#verb-count-label")).toHaveText("1 verb saved");
+    expect(calls).toBe(1);
+
+    await add("enfuir");
+    const onlyCard = page.locator(`[data-card-inf="s'enfuir"]`);
+    await expect(onlyCard.getByRole("heading", {name: "s'enfuir", exact: true})).toBeVisible();
+    await expect(onlyCard.locator(".variant-switch")).toHaveCount(0);
+    await expect(page.locator("#verb-count-label")).toHaveText("2 verbs saved");
+    expect(calls).toBe(2);
+  });
+}
+
 test("flashcard front, reveal and audio use the same shuffled verb",async({page})=>{
   await page.addInitScript(({stateKey,verbs})=>{localStorage.setItem(stateKey,JSON.stringify({verbs,tombstones:{}})); Math.random=()=>0;},{stateKey,verbs:[OFFLINE_DICTIONARY.prendre,OFFLINE_DICTIONARY.boire]});
   await page.goto("/"); await expect(page.locator("html")).toHaveAttribute("data-ready","true");

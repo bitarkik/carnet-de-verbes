@@ -1,9 +1,9 @@
-import { validateVerb } from "./validation.js?v=30";
+import { validateVerb } from "./validation.js?v=31";
 // ==========================================================================
 // Live Google Gemini AI Integration (Verb Lookup, Screenshot Vision, Word Import)
 // ==========================================================================
 
-import { normalizeVerbEntry, stripAccents } from "./french-engine.js?v=30";
+import { areVerbCounterparts, normalizeVerbEntry, stripAccents } from "./french-engine.js?v=31";
 
 // Documented Gemini models; availability and quotas depend on the account.
 const MODELS = [
@@ -168,10 +168,23 @@ export async function testGeminiKey(apiKey) {
   return true;
 }
 
-export async function lookupVerbWithAI(rawInput, apiKey) {
+export async function lookupVerbWithAI(rawInput, apiKey, { includeCounterpart = false, knownInfinitive, expectedCounterpart } = {}) {
+  const pairInstructions = includeCounterpart ? `
+Add a required top-level "counterpart" field. When the same infinitive has both established
+non-reflexive and pronominal uses in modern French, return a complete verb entry for the other
+form in "counterpart", with its own meanings, examples, quiz and conjugations. Do this whether
+or not the input contains a reflexive pronoun. Prefer the form used in the input for "verb".
+For an exclusively pronominal verb, use its full se/s' infinitive for "verb", even if the user
+omitted the pronoun, and set "counterpart" to null. Also use null if no genuine counterpart
+exists or the input is invalid. Never invent a form by adding or removing se/s'.
+Each tense must have exactly six strings, one per person, including only one row for each
+combined il/elle and ils/elles. Put gender/number alternatives in the same string.
+${knownInfinitive ? `Use the already identified infinitive ${JSON.stringify(knownInfinitive)} as "verb".` : ""}
+${expectedCounterpart ? `The verified other form is ${JSON.stringify(expectedCounterpart)}. Include it in "counterpart".` : ""}
+` : "";
   const prompt = `You are an expert French linguistics tutor helping a Duolingo French learner.
-Analyze the user's input: "${rawInput}"
-${VERB_ENTRY_SCHEMA_PROMPT}`;
+Analyze the user's input: ${JSON.stringify(rawInput)}
+${VERB_ENTRY_SCHEMA_PROMPT}${pairInstructions}`;
 
   const result = await callGemini(apiKey, [{ parts: [{ text: prompt }] }]);
   if (!result.isValidFrenchVerb || !result.verb) {
@@ -180,21 +193,35 @@ ${VERB_ENTRY_SCHEMA_PROMPT}`;
       reason: result.reasonIfInvalid || `“${rawInput}” is not recognized as a French verb.`
     };
   }
-  return {
-    ok: true,
-    verb: checkedAIVerb(result.verb),
-    detectedFrom: result.detectedFrom || null
-  };
+  let verb = checkedAIVerb(result.verb);
+  let counterpart = null;
+  if (includeCounterpart) {
+    if (!Object.hasOwn(result, "counterpart")) throw new Error("Gemini did not finish checking for both forms. Please retry.");
+    if (result.counterpart !== null) {
+      counterpart = checkedAIVerb(result.counterpart);
+      if (!areVerbCounterparts(verb.infinitive, counterpart.infinitive)) {
+        throw new Error("Gemini returned forms from different verbs. Please retry.");
+      }
+    }
+    if (knownInfinitive && counterpart?.infinitive === knownInfinitive) [verb, counterpart] = [counterpart, verb];
+    if (knownInfinitive && verb.infinitive !== knownInfinitive) throw new Error("Gemini returned a different verb. Please retry.");
+    if (expectedCounterpart && counterpart?.infinitive !== expectedCounterpart) {
+      throw new Error(`Gemini did not return “${expectedCounterpart}”. Please retry.`);
+    }
+  }
+  return { ok: true, verb, counterpart, detectedFrom: result.detectedFrom || null };
 }
 
 function checkedAIVerb(raw) {
   const v = normalizeVerbEntry(validateVerb(raw));
+  // Counterparts must be checked independently from their primary entries.
+  delete v.counterpartData;
   const usesEtre = v.auxiliary === "être";
   for (const form of v.tenses.passeCompose) {
     if (form.startsWith("—")) continue;
     const etreForm = /\b(suis|es|est|sommes|etes|sont)\b/.test(stripAccents(form));
     if (etreForm !== usesEtre) throw new Error("AI returned inconsistent auxiliary and conjugations. Please retry.");
-    if (v.isReflexive && !/\b(me|te|se|nous|vous)\b|[mts]'/i.test(form)) throw new Error("AI omitted a reflexive pronoun. Please retry.");
+    if (v.isReflexive && !/\b(me|te|se|nous|vous)\b|[mts]['’]/i.test(form)) throw new Error("AI omitted a reflexive pronoun. Please retry.");
   }
   return v;
 }

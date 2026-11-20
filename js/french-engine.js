@@ -815,6 +815,7 @@ const REFLEXIVE_INFO = {
   "se retrouver": { m: "to meet up / to find oneself", ex: ["On se retrouve au café ?", "Shall we meet at the café?"] },
   "se marier": { m: "to get married", ex: ["Ils se marient en juin.", "They're getting married in June."] },
   "s'inquiéter": { m: "to worry", ex: ["Ne t'inquiète pas.", "Don't worry."] },
+  "se méfier": { m: "to distrust / to be wary of", tipPrep: "se méfier de quelque chose ou de quelqu’un.", ex: ["Elle se méfie des promesses trop belles.", "She is wary of promises that sound too good."] },
   "se disputer": {
     m: "to argue / to quarrel",
     tipPrep: "se disputer avec quelqu'un = to argue with someone.",
@@ -849,6 +850,7 @@ function buildReflexiveFromBase(reflexiveInf) {
   const base = inf.startsWith("se ") ? inf.slice(3).trim() : inf.startsWith("s'") ? inf.slice(2).trim() : null;
   if (!base) return null;
   const info = REFLEXIVE_INFO[inf] || {};
+  if (!info.m && REFLEXIVE_TWINS[base] !== inf) return null;
   // Base verb not in the offline pack (e.g. "tromper", "baigner"): if we know
   // the reflexive meaning AND the base is a regular -er verb, the engine can
   // generate it safely from scratch. Never do this for -ir / -re bases —
@@ -928,6 +930,15 @@ export function lookupOfflineVerb(rawInput) {
     };
   }
 
+  // A few well-established pronominal-only verbs can be entered without se/s'.
+  const onlyReflexive = [...ALWAYS_REFLEXIVE_VERBS].find(inf =>
+    stripAccents(inf) === unaccented || stripAccents(verbFamilyKey(inf)) === unaccented
+  );
+  if (onlyReflexive) {
+    const entry = OFFLINE_DICTIONARY[onlyReflexive] || buildReflexiveFromBase(onlyReflexive);
+    if (entry) return { ok: true, verb: structuredClone(entry), detectedFrom: rawInput.trim() };
+  }
+
   // 2c. Reflexive infinitive ("se passer", "se rendre", "s'entendre").
   // These are usually NOT in the offline pack, so the scan below would find
   // the bare base verb ("passer", "rendre") and silently drop the "se" —
@@ -950,7 +961,11 @@ export function lookupOfflineVerb(rawInput) {
   // "il s'est passé", "je me suis rendu"). Resolve the bare verb form,
   // then build the reflexive entry from it.
   const reflMatch = cleaned.match(/^(je|tu|il|elle|on|nous|vous|ils|elles)\s+(me|te|se|nous|vous|m'|t'|s')\s*(.*)$/);
-  if (reflMatch) {
+  const reflexivePronounsBySubject = {
+    je: ["me", "m'"], tu: ["te", "t'"], il: ["se", "s'"], elle: ["se", "s'"],
+    on: ["se", "s'"], nous: ["nous"], vous: ["vous"], ils: ["se", "s'"], elles: ["se", "s'"]
+  };
+  if (reflMatch && reflexivePronounsBySubject[reflMatch[1]].includes(reflMatch[2])) {
     const restWords = reflMatch[3].trim().split(" ").filter(Boolean);
     const AUX_FORMS = new Set(["suis", "es", "est", "sommes", "êtes", "sont"]);
     let verbToken = restWords[0] || "";
@@ -969,7 +984,8 @@ export function lookupOfflineVerb(rawInput) {
         return { ok: true, verb: built, detectedFrom: rawInput.trim() };
       }
     }
-    // No base found: fall through to the normal scan below.
+    // Preserve an explicit reflexive construction for the AI lookup.
+    return { ok: false, needsAI: true, reason: `Connect Gemini to look up “${rawInput.trim()}” as a reflexive verb.` };
   }
 
   // 3. Scan 3-word, 2-word, and 1-word tokens inside a Duolingo phrase (e.g. "nous avons pris le train")
@@ -1134,11 +1150,28 @@ export const IMPERSONAL_VERBS = new Set([
   "s'agir", "y avoir"
 ]);
 
-const ALWAYS_REFLEXIVE_VERBS = new Set([
-  "se souvenir", "s'agenouiller", "se méfier", "se moquer", "se suicider",
-  "s'évanouir", "se taire", "s'agir", "se blottir", "se démener",
-  "s'emparer", "s'enfuir", "s'envoler", "se repentir", "s'efforcer"
-]);
+const ALWAYS_REFLEXIVE_VERBS = new Set(["se souvenir", "se méfier", "s'enfuir", "s'agir"]);
+
+function canonicalInfinitive(infinitive) {
+  return String(infinitive || "").normalize("NFC").toLowerCase().replace(/’/g, "'").trim().replace(/\s+/g, " ");
+}
+
+export function verbFamilyKey(infinitive) {
+  return canonicalInfinitive(infinitive).replace(/^(?:se |s')/, "");
+}
+
+export function isReflexiveOnly(infinitive) {
+  return ALWAYS_REFLEXIVE_VERBS.has(canonicalInfinitive(infinitive));
+}
+
+export function areVerbCounterparts(first, second) {
+  if (!first || !second) return false;
+  const a = canonicalInfinitive(first);
+  const b = canonicalInfinitive(second);
+  const base = verbFamilyKey(a);
+  return Boolean(base && a !== b && base === verbFamilyKey(b) && (a === base || b === base) &&
+    !isReflexiveOnly(a) && !isReflexiveOnly(b));
+}
 
 const REFLEXIVE_TWINS = {
   "réveiller": "se réveiller",
@@ -1150,10 +1183,8 @@ const REFLEXIVE_TWINS = {
   "promener": "se promener",
   "lever": "se lever",
   "appeler": "s'appeler",
-  // NOTE: no "reposer" / "dépêcher" twins here. Their bare forms are rarely
-  // used on their own, so offering them as a switch just led offline to a
-  // dead end ("connect Gemini to load reposer"). "se reposer" and
-  // "se dépêcher" still work on their own; type the bare verb to add it.
+  "reposer": "se reposer",
+  "dépêcher": "se dépêcher",
   "tromper": "se tromper",
   "rappeler": "se rappeler",
   "passer": "se passer",
@@ -1194,7 +1225,7 @@ const REFLEXIVE_TWINS = {
 };
 
 export function getReflexiveCounterpart(infinitive) {
-  const inf = String(infinitive || "").toLowerCase().replace(/’/g, "'").trim();
+  const inf = canonicalInfinitive(infinitive);
   if (!inf) return null;
 
   // If currently reflexive -> suggest non-reflexive base (unless always-reflexive)
@@ -1207,12 +1238,12 @@ export function getReflexiveCounterpart(infinitive) {
     // would offer a twin we have never verified, and the switch would either
     // invent it via Gemini or fail offline. To add a new twin, add it to
     // REFLEXIVE_TWINS above.
-    if (!REFLEXIVE_TWINS[base] && !OFFLINE_DICTIONARY[base]) return null;
+    if (!Object.hasOwn(REFLEXIVE_TWINS, base) && !OFFLINE_DICTIONARY[base]) return null;
     return base;
   }
 
   // If non-reflexive -> return known reflexive twin if one exists
-  if (REFLEXIVE_TWINS[inf]) {
+  if (Object.hasOwn(REFLEXIVE_TWINS, inf)) {
     return REFLEXIVE_TWINS[inf];
   }
   return null;
@@ -1229,7 +1260,7 @@ export function normalizeVerbEntry(rawVerb) {
   if (!rawVerb || typeof rawVerb !== "object") return rawVerb;
   const v = { ...rawVerb };
 
-  let inf = String(v.infinitive || "").toLowerCase().replace(/’/g, "'").trim();
+  let inf = canonicalInfinitive(v.infinitive);
   const startsWithRefl = inf.startsWith("se ") || inf.startsWith("s'");
 
   // 1. Reflexive guardrail: any verb starting with se/s' (or flagged isReflexive) MUST be reflexive + aux. être

@@ -2,7 +2,7 @@
 if ("serviceWorker" in navigator) {
   const start = async () => {
     try {
-      const registration = await navigator.serviceWorker.register("./sw.js?v=30", { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register("./sw.js?v=31", { updateViaCache: "none" });
       await registration.update();
     } catch { /* Offline: continue using the installed app. */ }
   };

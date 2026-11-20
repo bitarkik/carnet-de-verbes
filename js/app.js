@@ -1,4 +1,4 @@
-import { validateVerb, validateState } from "./validation.js?v=30";
+import { validateVerb, validateState } from "./validation.js?v=31";
 // ==========================================================================
 // Carnet de Verbes — Clean Accordion Notebook Controller (Muse-Inspired)
 // ==========================================================================
@@ -8,17 +8,19 @@ import {
   extractOfflineVerbsFromText,
   stripAccents,
   normalizeVerbEntry,
-  getReflexiveCounterpart
-} from "./french-engine.js?v=30";
+  getReflexiveCounterpart,
+  areVerbCounterparts,
+  isReflexiveOnly
+} from "./french-engine.js?v=31";
 import {
   testGeminiKey,
   lookupVerbWithAI,
   extractVerbsFromScreenshots,
   extractVerbsFromWordTextWithAI
-} from "./ai.js?v=30";
-import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=30";
-import { loadLocalState, saveLocalState, loadSettings, saveSettings as writeSettings, syncWithGitHubGist, mergeNotebookStates } from "./sync.js?v=30";
-import { createPracticeController } from "./practice.js?v=30";
+} from "./ai.js?v=31";
+import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=31";
+import { loadLocalState, saveLocalState, loadSettings, saveSettings as writeSettings, syncWithGitHubGist, mergeNotebookStates } from "./sync.js?v=31";
+import { createPracticeController } from "./practice.js?v=31";
 
 const TENSES = [
   { key: "present", label: "Présent" },
@@ -258,11 +260,65 @@ function upsertVerb(rawVerbObj, { select = true, defer = false } = {}) {
   return { alreadyExisted: false, verb: enriched };
 }
 
+function savedCounterpart(verb) {
+  return areVerbCounterparts(verb.infinitive, verb.counterpartData?.infinitive) ? verb.counterpartData : null;
+}
+
+function offlineCounterpart(infinitive) {
+  const target = getReflexiveCounterpart(infinitive);
+  if (!target) return null;
+  const {verb} = lookupOfflineVerb(target);
+  return verb?.infinitive === target && areVerbCounterparts(infinitive, target) ? verb : null;
+}
+
+async function resolveAddedVerb(input, knownVerb) {
+  const offline = knownVerb ? {ok: true, verb: knownVerb} : lookupOfflineVerb(input);
+  const apiKey = settings.geminiKey?.trim();
+  if (!offline.ok) {
+    if (!apiKey) return offline;
+    const result = await lookupVerbWithAI(input, apiKey, {includeCounterpart: true});
+    if (!result.ok || result.counterpart) return result;
+    const counterpart = offlineCounterpart(result.verb.infinitive);
+    if (counterpart) return {...result, counterpart};
+
+    const expected = getReflexiveCounterpart(result.verb.infinitive);
+    if (!expected) return result;
+    const pair = await lookupVerbWithAI(input, apiKey, {
+      includeCounterpart: true, knownInfinitive: result.verb.infinitive, expectedCounterpart: expected
+    });
+    if (!pair.ok) throw new Error(pair.reason);
+    return {...result, counterpart: pair.counterpart};
+  }
+
+  const {verb} = offline;
+  const counterpart = savedCounterpart(verb) ||
+    verbs.find(v => areVerbCounterparts(verb.infinitive, v.infinitive)) ||
+    offlineCounterpart(verb.infinitive);
+  if (counterpart || isReflexiveOnly(verb.infinitive)) return {...offline, counterpart};
+
+  const expectedCounterpart = getReflexiveCounterpart(verb.infinitive);
+  if (!apiKey) {
+    const warning = expectedCounterpart ? `Connect Gemini to load “${expectedCounterpart}”.` : null;
+    return {...offline, warning};
+  }
+
+  try {
+    const result = await lookupVerbWithAI(input, apiKey, {
+      includeCounterpart: true, knownInfinitive: verb.infinitive, expectedCounterpart
+    });
+    if (!result.ok) throw new Error(result.reason);
+    return {...offline, counterpart: result.counterpart};
+  } catch (error) {
+    return {...offline, warning: `Couldn't check both forms. ${error.message}`};
+  }
+}
+
 async function handleAddVerb(rawText) {
   const trimmed = rawText.trim();
   if (!trimmed) return;
 
   const submitBtn = $("quick-add-submit-btn");
+  if (submitBtn.disabled) return;
   const input = $("quick-add-input");
   submitBtn.disabled = true;
   submitBtn.textContent = "Adding...";
@@ -283,8 +339,7 @@ async function handleAddVerb(rawText) {
   };
 
   try {
-    // 0. Check if this verb or conjugated form is ALREADY in your personal saved notebook!
-    // Never waste an API call or wait 10 seconds if you already have it saved.
+    // Match saved entries before looking up new conjugations.
     const cleanLower = trimmed.toLowerCase().replace(/’/g, "'").trim();
     const unaccentedInput = stripAccents(cleanLower);
 
@@ -309,74 +364,60 @@ async function handleAddVerb(rawText) {
         matchedVariantInf = null;
         return true;
       }
-      if (v.counterpartData && verbMatchesInput(v.counterpartData)) {
+      if (verbMatchesInput(savedCounterpart(v))) {
         matchedVariantInf = v.counterpartData.infinitive;
         return true;
       }
       return false;
     });
 
-    if (existingVerb) {
-      input.value = "";
-      activeFilter = "all";
-      openVerbId = existingVerb.infinitive;
-      if (matchedVariantInf) {
-        activeVariantMap[existingVerb.infinitive] = matchedVariantInf;
-      } else {
-        delete activeVariantMap[existingVerb.infinitive];
-      }
-      render();
-      scrollToVerb(existingVerb.infinitive);
-      showMsg(`${matchedVariantInf || existingVerb.infinitive} is already in your notebook — opened here.`);
+    const knownVerb = matchedVariantInf ? savedCounterpart(existingVerb) : existingVerb;
+    const result = await resolveAddedVerb(trimmed, knownVerb);
+    if (!result.ok) {
+      showMsg(result.reason, {isError: true});
       return;
     }
 
-    // 1. Look up the verb in the offline dictionary
-    const offline = lookupOfflineVerb(trimmed);
-    if (offline.ok) {
-      if (trimmed.split(/\s+/).length >= 3) {
-        offline.verb.duolingoContext = {
+    const {verb: selected, counterpart} = result;
+    const sameEntry = verbs.find(v => v.infinitive === selected.infinitive ||
+      savedCounterpart(v)?.infinitive === selected.infinitive);
+    const otherEntry = counterpart && verbs.find(v => v.infinitive === counterpart.infinitive);
+    const alreadyExisted = Boolean(sameEntry || otherEntry);
+    let card = sameEntry || otherEntry;
+    if (!card) {
+      const entry = {...selected};
+      if (trimmed.split(/\s+/).length >= 3 && result.detectedFrom) {
+        entry.duolingoContext = {
           fr: trimmed,
-          en: offline.verb.duolingoContext?.en || `Spotted phrase (${offline.verb.infinitive}).`
+          en: selected.duolingoContext?.en || `Spotted phrase (${selected.infinitive}).`
         };
       }
-      input.value = "";
-      activeFilter = "all";
-      const { alreadyExisted, verb } = upsertVerb(offline.verb);
-      scrollToVerb(verb.infinitive);
-      showMsg(
-        alreadyExisted
-          ? `${verb.infinitive} is already in your notebook — opened here.`
-          : offline.detectedFrom
-            ? `${verb.infinitive} added (detected from “${offline.detectedFrom}”) ✓`
-            : `${verb.infinitive} added to your notebook ✓`
-      );
-      return;
+      card = upsertVerb(entry, {defer: true}).verb;
     }
 
-    // 2. Query Gemini AI if key is set
-    if (settings.geminiKey?.trim()) {
-      const aiRes = await lookupVerbWithAI(trimmed, settings.geminiKey.trim());
-      if (!aiRes.ok) {
-        showMsg(aiRes.reason, { isError: true });
-        return;
-      }
-      input.value = "";
-      activeFilter = "all";
-      const { alreadyExisted, verb } = upsertVerb(aiRes.verb);
-      scrollToVerb(verb.infinitive);
-      showMsg(
-        alreadyExisted
-          ? `${verb.infinitive} is already in your notebook — opened here.`
-          : aiRes.detectedFrom
-            ? `${verb.infinitive} added via Gemini AI (from “${aiRes.detectedFrom}”) ✓`
-            : `${verb.infinitive} added via Gemini AI ✓`
-      );
-      return;
+    const other = card.infinitive === selected.infinitive ? counterpart : selected;
+    let changed = !alreadyExisted;
+    if (other && !savedCounterpart(card) && areVerbCounterparts(card.infinitive, other.infinitive)) {
+      const {counterpartData, ...entry} = other;
+      card.counterpartData = structuredClone(entry);
+      card.updatedAt = Date.now();
+      changed = true;
     }
+    if (changed) persistAndScheduleSync();
 
-    // 3. Strictly reject fake words offline
-    showMsg(offline.reason, { isError: true });
+    input.value = "";
+    activeFilter = "all";
+    openVerbId = card.infinitive;
+    if (card.infinitive === selected.infinitive) delete activeVariantMap[card.infinitive];
+    else activeVariantMap[card.infinitive] = selected.infinitive;
+    render();
+    scrollToVerb(card.infinitive);
+
+    const pair = savedCounterpart(card);
+    const status = pair ? `Both forms are in your notebook: ${card.infinitive} and ${pair.infinitive}.` :
+      alreadyExisted ? `${selected.infinitive} is already in your notebook — opened here.` :
+      `${selected.infinitive} added to your notebook ✓`;
+    showMsg(result.warning ? `${status} ${result.warning}` : status, {isError: Boolean(result.warning)});
   } catch (err) {
     showMsg(`AI lookup failed: ${err.message}`, { isError: true });
   } finally {
@@ -430,7 +471,7 @@ function getFilteredVerbs() {
     if (
       activeFilter === "reflexive" &&
       !v.isReflexive &&
-      !(v.counterpartData && v.counterpartData.isReflexive) &&
+      !savedCounterpart(v) &&
       !getReflexiveCounterpart(v.infinitive)
     ) return false;
     if (activeFilter === "impersonal" && !v.isImpersonal && !["falloir", "pleuvoir", "neiger"].includes(v.infinitive.toLowerCase())) return false;
@@ -449,7 +490,7 @@ function getFilteredVerbs() {
         (arr || []).some((form) => stripAccents(form).includes(q))
       );
     };
-    return matchesObj(v) || matchesObj(v.counterpartData);
+    return matchesObj(v) || matchesObj(savedCounterpart(v));
   });
 
   return filtered.sort((a, b) => {
@@ -485,7 +526,7 @@ async function switchCardVariant(cardInfinitive, targetInfinitive, btnEl) {
   if (!cardVerb) return;
 
   // 1. Already cached on this card
-  if (cardVerb.counterpartData?.infinitive === targetInfinitive) {
+  if (savedCounterpart(cardVerb)?.infinitive === targetInfinitive) {
     activeVariantMap[cardInfinitive] = targetInfinitive;
     render();
     return;
@@ -505,7 +546,7 @@ async function switchCardVariant(cardInfinitive, targetInfinitive, btnEl) {
 
   // 3. Instant offline dictionary lookup
   const offline = lookupOfflineVerb(targetInfinitive);
-  if (offline.ok) {
+  if (offline.ok && offline.verb.infinitive === targetInfinitive) {
     cardVerb.counterpartData = normalizeVerbEntry(offline.verb);
     cardVerb.updatedAt = Date.now();
     activeVariantMap[cardInfinitive] = targetInfinitive;
@@ -527,6 +568,7 @@ async function switchCardVariant(cardInfinitive, targetInfinitive, btnEl) {
         showMsg(aiRes.reason, { isError: true });
         return;
       }
+      if (aiRes.verb.infinitive !== targetInfinitive) throw new Error("Gemini returned a different verb. Please retry.");
       cardVerb.counterpartData = aiRes.verb;
       cardVerb.updatedAt = Date.now();
       activeVariantMap[cardInfinitive] = targetInfinitive;
@@ -582,14 +624,10 @@ function render() {
   container.innerHTML = list
     .map((v) => {
       const isOpen = v.infinitive === openVerbId;
-      const counterpart = getReflexiveCounterpart(v.infinitive);
+      const savedVariant = savedCounterpart(v);
+      const counterpart = savedVariant?.infinitive || getReflexiveCounterpart(v.infinitive);
       const activeVar = activeVariantMap[v.infinitive];
-      // A cached counterpart is only valid if it is actually the counterpart
-      // (an earlier bug cached the base verb itself as "se passer" / "se rendre").
-      const hasValidCounterpart = Boolean(
-        counterpart && v.counterpartData &&
-        v.counterpartData.infinitive.toLowerCase() === counterpart.toLowerCase()
-      );
+      const hasValidCounterpart = Boolean(savedVariant);
       const isCounterpartActive = Boolean(
         counterpart && activeVar === counterpart && hasValidCounterpart
       );
@@ -1145,16 +1183,11 @@ function init() {
       if (activeFilter === "reflexive") {
         let changed = false;
         for (const v of verbs) {
-          if (v.isReflexive) continue;
+          if (v.isReflexive || savedCounterpart(v)) continue;
           const cp = getReflexiveCounterpart(v.infinitive);
           if (!cp) continue;
-          const stale =
-            v.counterpartData &&
-            (v.counterpartData.infinitive.toLowerCase() !== cp.toLowerCase() ||
-              !v.counterpartData.isReflexive);
-          if (v.counterpartData && !stale) continue;
           const offline = lookupOfflineVerb(cp);
-          if (offline.ok) {
+          if (offline.ok && offline.verb.infinitive === cp) {
             v.counterpartData = normalizeVerbEntry(offline.verb);
             v.updatedAt = Date.now();
             changed = true;
@@ -1312,7 +1345,7 @@ function init() {
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register("./sw.js?v=30")
+        .register("./sw.js?v=31")
         .then((reg) => {
           reg.update().catch(() => {});
           // Listen for updates and automatically refresh if new version found
