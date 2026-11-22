@@ -80,6 +80,28 @@ test("adding a saved verb brings its entire header into view", async ({page}) =>
   await expect(card.getByRole("button", {name: target, exact: true})).toHaveAttribute("aria-expanded", "true");
 });
 
+test("saved conjugations show grouped subject pronouns only in the row labels", async ({page}) => {
+  const entry = lookupOfflineVerb("s'inquiéter").verb;
+  entry.tenses.present = [
+    "je m'inquiète*", "tu t'inquiètes*", "il/elle/on s'inquiète*",
+    "nous nous inquiétons", "vous vous inquiétez", "ils / elles s'inquiètent*"
+  ];
+  await page.addInitScript(({stateKey, entry}) => {
+    localStorage.setItem(stateKey, JSON.stringify({verbs: [entry], tombstones: {}}));
+    window.speechSynthesis.speak = utterance => { window.lastSpoken = utterance.text; };
+  }, {stateKey, entry});
+  await page.goto("/");
+  await expect(page.locator("html")).toHaveAttribute("data-ready", "true");
+  const cells = page.locator(".conj-cell");
+  await expect(cells.locator(".conj-verb")).toHaveText([
+    "m'inquiète", "t'inquiètes", "s'inquiète", "nous inquiétons", "vous inquiétez", "s'inquiètent"
+  ]);
+  await expect(cells.nth(2).locator(".conj-pronoun")).toHaveText("il / elle");
+  await expect(cells.nth(2).locator(".stem-highlight")).toHaveText("s'inquiète");
+  await cells.nth(2).click();
+  expect(await page.evaluate(() => window.lastSpoken)).toBe("il s'inquiète");
+});
+
 test("dispute and occupe add offline with switchable reflexive forms", async ({page, context}) => {
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("data-ready", "true");

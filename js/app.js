@@ -1,4 +1,4 @@
-import { validateVerb, validateState } from "./validation.js?v=32";
+import { validateVerb, validateState } from "./validation.js?v=33";
 // ==========================================================================
 // Carnet de Verbes — Clean Accordion Notebook Controller (Muse-Inspired)
 // ==========================================================================
@@ -11,16 +11,16 @@ import {
   getReflexiveCounterpart,
   areVerbCounterparts,
   isReflexiveOnly
-} from "./french-engine.js?v=32";
+} from "./french-engine.js?v=33";
 import {
   testGeminiKey,
   lookupVerbWithAI,
   extractVerbsFromScreenshots,
   extractVerbsFromWordTextWithAI
-} from "./ai.js?v=32";
-import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=32";
-import { loadLocalState, saveLocalState, loadSettings, saveSettings as writeSettings, syncWithGitHubGist, mergeNotebookStates } from "./sync.js?v=32";
-import { createPracticeController } from "./practice.js?v=32";
+} from "./ai.js?v=33";
+import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=33";
+import { loadLocalState, saveLocalState, loadSettings, saveSettings as writeSettings, syncWithGitHubGist, mergeNotebookStates } from "./sync.js?v=33";
+import { createPracticeController } from "./practice.js?v=33";
 
 const TENSES = [
   { key: "present", label: "Présent" },
@@ -31,6 +31,12 @@ const TENSES = [
 ];
 
 const PRONOUN_LABELS = ["je", "tu", "il / elle", "nous", "vous", "ils / elles"];
+const SUBJECT_PREFIX = /^(?:je|tu|nous|vous|(?:il|elle|on|ils|elles)(?:\s*\/\s*(?:il|elle|on|ils|elles))*)\s+/i;
+const ELIDED_JE = /^j['’]/i;
+
+function stripSubject(form) {
+  return form.replace(SUBJECT_PREFIX, "").replace(ELIDED_JE, "");
+}
 
 const $ = (id) => document.getElementById(id);
 
@@ -86,11 +92,8 @@ export function speakFrench(text) {
   const cleaned = String(text || "")
     .replace(/\*/g, "")
     .replace(/\(e\)|\(s\)/g, "")
-    .replace("il/elle", "il")
-    .replace("il / elle", "il")
-    .replace("ils/elles", "ils")
-    .replace("ils / elles", "ils")
-    .trim();
+    .trim()
+    .replace(SUBJECT_PREFIX, subject => subject.includes("/") ? `${subject.split("/")[0].trim()} ` : subject);
   if (!cleaned) return;
 
   window.speechSynthesis.cancel();
@@ -344,7 +347,7 @@ async function handleAddVerb(rawText) {
         (forms || []).some((f) => {
           const c = f.replace(/\*/g, "").replace(/\(e\)|\(s\)/g, "").toLowerCase().trim();
           if (c === cleanLower || stripAccents(c) === unaccentedInput) return true;
-          const withoutSubj = c.replace(/^(il\/elle|ils\/elles|nous|vous|tu|je)\s+/, "").replace(/^j'/, "").trim();
+          const withoutSubj = stripSubject(c);
           return withoutSubj === cleanLower || stripAccents(withoutSubj) === unaccentedInput;
         })
       );
@@ -510,17 +513,13 @@ function getFilteredVerbs() {
 
 function formatVerbCell(rawForm) {
   const isHighlight = rawForm.includes("*");
-  const clean = esc(rawForm.replace(/\*/g, ""));
+  const clean = rawForm.replace(/\*/g, "").trim();
   if (clean.startsWith("—")) {
-    return `<span style="color: var(--text-muted);">${clean}</span>`;
+    return `<span style="color: var(--text-muted);">${esc(clean)}</span>`;
   }
-  // Strip redundant subject pronoun if already present so cell doesn't duplicate
-  const formWithoutSubject = clean
-    .replace(/^(je|tu|il\/elle|il \/ elle|il|elle|on|nous|vous|ils\/elles|ils \/ elles|ils|elles)\s+/, "")
-    .replace(/^j['’]/, "");
-
-  const display = isHighlight ? `<span class="stem-highlight">${formWithoutSubject}</span>` : formWithoutSubject;
-  return display;
+  // The subject is shown in a separate cell. Keep the reflexive pronoun in the form.
+  const formWithoutSubject = esc(stripSubject(clean));
+  return isHighlight ? `<span class="stem-highlight">${formWithoutSubject}</span>` : formWithoutSubject;
 }
 
 // ---------- In-Card Reflexive / Non-Reflexive Switch ----------
@@ -669,12 +668,12 @@ function render() {
           return `
             <div class="conj-row-pair">
               <div class="conj-cell" role="button" tabindex="0" data-speak="${esc(f1)}">
-                <span class="conj-pronoun">${displayVerb.isImpersonal ? (i1 === 2 ? "il" : "—") : /^j['’]/.test(f1) ? "j’" : PRONOUN_LABELS[i1]}</span>
+                <span class="conj-pronoun">${displayVerb.isImpersonal ? (i1 === 2 ? "il" : "—") : ELIDED_JE.test(f1.trim()) ? "j’" : PRONOUN_LABELS[i1]}</span>
                 <span class="conj-verb">${formatVerbCell(f1)}</span>
                 <span class="speaker-icon">🔊</span>
               </div>
               <div class="conj-cell" role="button" tabindex="0" data-speak="${esc(f2)}">
-                <span class="conj-pronoun">${displayVerb.isImpersonal ? (i2 === 2 ? "il" : "—") : /^j['’]/.test(f2) ? "j’" : PRONOUN_LABELS[i2]}</span>
+                <span class="conj-pronoun">${displayVerb.isImpersonal ? (i2 === 2 ? "il" : "—") : ELIDED_JE.test(f2.trim()) ? "j’" : PRONOUN_LABELS[i2]}</span>
                 <span class="conj-verb">${formatVerbCell(f2)}</span>
                 <span class="speaker-icon">🔊</span>
               </div>
@@ -1358,7 +1357,7 @@ function init() {
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register("./sw.js?v=32")
+        .register("./sw.js?v=33")
         .then((reg) => {
           reg.update().catch(() => {});
           // Listen for updates and automatically refresh if new version found

@@ -1,9 +1,9 @@
-import { validateVerb } from "./validation.js?v=32";
+import { validateVerb } from "./validation.js?v=33";
 // ==========================================================================
 // Live Google Gemini AI Integration (Verb Lookup, Screenshot Vision, Word Import)
 // ==========================================================================
 
-import { areVerbCounterparts, normalizeVerbEntry, stripAccents } from "./french-engine.js?v=32";
+import { areVerbCounterparts, normalizeVerbEntry, stripAccents } from "./french-engine.js?v=33";
 
 // Documented Gemini models; availability and quotas depend on the account.
 const MODELS = [
