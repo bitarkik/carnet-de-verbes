@@ -1,4 +1,4 @@
-import { validateVerb, validateState } from "./validation.js?v=34";
+import { validateVerb, validateState } from "./validation.js?v=35";
 // ==========================================================================
 // Carnet de Verbes — Clean Accordion Notebook Controller (Muse-Inspired)
 // ==========================================================================
@@ -11,16 +11,16 @@ import {
   getReflexiveCounterpart,
   areVerbCounterparts,
   isReflexiveOnly
-} from "./french-engine.js?v=34";
+} from "./french-engine.js?v=35";
 import {
   testGeminiKey,
   lookupVerbWithAI,
   extractVerbsFromScreenshots,
   extractVerbsFromWordTextWithAI
-} from "./ai.js?v=34";
-import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=34";
-import { loadLocalState, saveLocalState, loadSettings, saveSettings as writeSettings, syncWithGitHubGist, mergeNotebookStates } from "./sync.js?v=34";
-import { createPracticeController } from "./practice.js?v=34";
+} from "./ai.js?v=35";
+import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=35";
+import { loadLocalState, saveLocalState, loadSettings, saveSettings as writeSettings, syncWithGitHubGist, mergeNotebookStates } from "./sync.js?v=35";
+import { createPracticeController } from "./practice.js?v=35";
 
 const TENSES = [
   { key: "present", label: "Présent" },
@@ -288,13 +288,7 @@ async function resolveAddedVerb(input, knownVerb) {
     const counterpart = offlineCounterpart(result.verb.infinitive);
     if (counterpart) return {...result, counterpart};
 
-    const expected = getReflexiveCounterpart(result.verb.infinitive);
-    if (!expected) return result;
-    const pair = await lookupVerbWithAI(input, apiKey, {
-      includeCounterpart: true, knownInfinitive: result.verb.infinitive, expectedCounterpart: expected
-    });
-    if (!pair.ok) throw new Error(pair.reason);
-    return {...result, counterpart: pair.counterpart};
+    return result;
   }
 
   const {verb} = offline;
@@ -577,12 +571,11 @@ async function switchCardVariant(cardInfinitive, targetInfinitive, btnEl) {
       btnEl.textContent = "Loading...";
     }
     try {
-      const aiRes = await lookupVerbWithAI(targetInfinitive, settings.geminiKey.trim());
+      const aiRes = await lookupVerbWithAI(targetInfinitive, settings.geminiKey.trim(), {knownInfinitive: targetInfinitive});
       if (!aiRes.ok) {
         showMsg(aiRes.reason, { isError: true });
         return;
       }
-      if (aiRes.verb.infinitive !== targetInfinitive) throw new Error("Gemini returned a different verb. Please retry.");
       cardVerb.counterpartData = aiRes.verb;
       cardVerb.updatedAt = Date.now();
       activeVariantMap[cardInfinitive] = targetInfinitive;
@@ -1363,7 +1356,7 @@ function init() {
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register("./sw.js?v=34")
+        .register("./sw.js?v=35")
         .then((reg) => {
           reg.update().catch(() => {});
           // Listen for updates and automatically refresh if new version found

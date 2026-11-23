@@ -208,6 +208,30 @@ for (const startWithReflexive of [false, true]) {
   });
 }
 
+test("an invalid screenshot result falls back to Hydrogen before saving a card", async ({page}) => {
+  await page.addInitScript(() => {
+    sessionStorage.setItem("carnet_de_verbes_settings_v1", JSON.stringify({geminiKey: "test-key"}));
+  });
+  const models = [];
+  await page.route("https://generativelanguage.googleapis.com/**", async route => {
+    const model = route.request().url().match(/\/models\/([^:]+):generateContent$/)[1];
+    models.push(model);
+    const verb = structuredClone(OFFLINE_DICTIONARY.aller);
+    if (models.length === 1) verb.tenses.passeCompose.pop();
+    await route.fulfill({json: {candidates: [{content: {parts: [{text: JSON.stringify({
+      entries: [{spottedForm: "vous êtes allé", verb}]
+    })}]}}]}});
+  });
+  await page.goto("/");
+  await expect(page.locator("html")).toHaveAttribute("data-ready", "true");
+  await page.getByRole("button", {name: "Add from screenshot"}).click();
+  await page.locator("#screenshot-file-input").setInputFiles("assets/icon-192.png");
+  await page.getByRole("button", {name: "Extract Verbs with AI"}).click();
+  await expect(page.getByRole("heading", {name: "aller", exact: true})).toBeVisible();
+  await expect(page.locator("#verb-count-label")).toHaveText("1 verb saved");
+  expect(models).toEqual(["gemini-3.8-flash", "gemini-4-hydrogen"]);
+});
+
 test("flashcard front, reveal and audio use the same shuffled verb",async({page})=>{
   await page.addInitScript(({stateKey,verbs})=>{localStorage.setItem(stateKey,JSON.stringify({verbs,tombstones:{}})); Math.random=()=>0;},{stateKey,verbs:[OFFLINE_DICTIONARY.prendre,OFFLINE_DICTIONARY.boire]});
   await page.goto("/"); await expect(page.locator("html")).toHaveAttribute("data-ready","true");

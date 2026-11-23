@@ -1,6 +1,6 @@
 // New AI entries must meet the full schema. Saved notebooks predate that schema:
 // preserve variable-length and absent tense arrays rather than rejecting all entries.
-const TENSES = ["present", "passeCompose", "imparfait", "futur", "conditionnel"];
+export const TENSE_KEYS = ["present", "passeCompose", "imparfait", "futur", "conditionnel"];
 const object = v => v !== null && typeof v === "object" && !Array.isArray(v);
 const text = v => typeof v === "string" && v.length <= 20000;
 export function validateVerb(v, depth = 0, { legacy = false } = {}) {
@@ -8,7 +8,7 @@ export function validateVerb(v, depth = 0, { legacy = false } = {}) {
       !text(v.pastParticiple) || !["avoir", "être"].includes(v.auxiliary) || !object(v.tenses)) {
     throw new Error("Invalid verb entry: missing or malformed required fields.");
   }
-  for (const key of TENSES) {
+  for (const key of TENSE_KEYS) {
     const forms = v.tenses[key];
     if (legacy && forms === undefined) continue;
     if (!Array.isArray(forms) || (!legacy && forms.length !== 6) || !forms.every(text))

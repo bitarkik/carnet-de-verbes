@@ -1,16 +1,42 @@
-import { validateVerb } from "./validation.js?v=34";
+import { TENSE_KEYS, validateVerb } from "./validation.js?v=35";
 // ==========================================================================
 // Live Google Gemini AI Integration (Verb Lookup, Screenshot Vision, Word Import)
 // ==========================================================================
 
-import { areVerbCounterparts, normalizeVerbEntry, stripAccents } from "./french-engine.js?v=34";
+import { areVerbCounterparts, getReflexiveCounterpart, lookupOfflineVerb, normalizeVerbEntry, stripAccents } from "./french-engine.js?v=35";
 
-// Documented Gemini models; availability and quotas depend on the account.
-const MODELS = [
-  "gemini-3.5-flash-lite",
-  "gemini-3.8-flash",
-  "gemini-3.6-flash"
-];
+const FLASH_LITE = "gemini-3.5-flash-lite";
+const HYDROGEN = "gemini-4-hydrogen";
+const FLASH = "gemini-3.8-flash";
+const TEXT_PLAN = {models: [FLASH_LITE, HYDROGEN, FLASH], totalMs: 30000, attemptsMs: [9000, 10000, 11000]};
+const SCREENSHOT_PLAN = {models: [FLASH, HYDROGEN, FLASH_LITE], totalMs: 60000, attemptsMs: [22000, 20000, 18000]};
+
+const textField = {type: "string"};
+const booleanField = {type: "boolean"};
+const textList = {type: "array", items: textField};
+const sixForms = {...textList, minItems: 6, maxItems: 6};
+const jsonObject = (properties, required = Object.keys(properties)) => ({type: "object", properties, required});
+const bilingualText = jsonObject({fr: textField, en: textField});
+const verbSchema = jsonObject({
+  infinitive: textField,
+  meaning: textField,
+  group: textField,
+  isIrregular: booleanField,
+  isReflexive: booleanField,
+  isImpersonal: booleanField,
+  auxiliary: {type: "string", enum: ["avoir", "être"]},
+  pastParticiple: textField,
+  duolingoContext: bilingualText,
+  duolingoTips: jsonObject({auxiliaryNote: textField, preposition: textField, homophone: textField, extra: textField}),
+  tenses: jsonObject(Object.fromEntries(TENSE_KEYS.map(tense => [tense, sixForms]))),
+  examples: {type: "array", items: bilingualText},
+  quiz: jsonObject({
+    tense: textField, sentence: textField, en: textField, answer: textField,
+    altAnswers: textList, explanation: textField
+  }, ["tense", "sentence", "en", "answer"])
+}, ["infinitive", "meaning", "auxiliary", "pastParticiple", "tenses"]);
+const nullableVerb = {...verbSchema, type: ["object", "null"]};
+const nullableText = {type: ["string", "null"]};
 
 const VERB_ENTRY_SCHEMA_PROMPT = `
 Return ONLY valid JSON matching this exact structure:
@@ -63,109 +89,129 @@ Important formatting rules:
 2. In "tenses", append an asterisk * at the end of forms that have irregular stems, stem-changes, or être agreement (e.g. "nous buvons*") so the UI highlights them.
 3. For impersonal verbs like falloir, pleuvoir, neiger, or s'agir, set "isImpersonal": true, use "—" for unused persons, and only fill index 2 ("il faut*").
 4. Any reflexive verb (starting with "se " or "s'") MUST have "isReflexive": true and "auxiliary": "être".
+5. Every tense has exactly six strings, in the order je/j', tu, il/elle, nous, vous, ils/elles. Put gender and number alternatives in the same row.
 `;
 
-function extractJsonFromGeminiData(data) {
-  const parts = data?.candidates?.[0]?.content?.parts || [];
-  const nonThoughtText = parts
-    .filter((p) => !p.thought && typeof p.text === "string" && p.text.trim().length > 0)
-    .map((p) => p.text.trim())
-    .join("\n");
-  const fallbackText = parts
-    .filter((p) => typeof p.text === "string" && p.text.trim().length > 0)
-    .map((p) => p.text.trim())
-    .join("\n");
-
-  let rawText = (nonThoughtText || fallbackText).trim();
-  if (!rawText) return null;
-
-  // Clean possible ```json ``` markdown code blocks and isolate the JSON object
-  rawText = rawText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
-  const firstBrace = rawText.indexOf("{");
-  const lastBrace = rawText.lastIndexOf("}");
-  if (firstBrace !== -1 && lastBrace > firstBrace) {
-    rawText = rawText.slice(firstBrace, lastBrace + 1);
+class GeminiFailure extends Error {
+  constructor(kind, message) {
+    super(message);
+    this.kind = kind;
   }
-  return JSON.parse(rawText);
 }
 
-async function callGemini(apiKey, contents) {
-  let lastErr = null;
-  const cleanKey = String(apiKey || "").trim();
+function classifyResponse(status, error) {
+  const message = error?.message || "";
+  const reasons = Array.isArray(error?.details) ? error.details.map(detail => detail?.reason) : [];
+  if (status === 401 || reasons.some(reason => /^API_KEY_/.test(reason || "")) ||
+      /API key (?:not valid|is invalid|was reported|has expired)/i.test(message)) {
+    return new GeminiFailure("key", "Gemini rejected the API key. Check it in Settings.");
+  }
+  if (status === 429 || (status === 400 && /billing|free tier|quota/i.test(message))) {
+    return new GeminiFailure("quota", "Gemini's rate limit or quota was reached. Check your AI Studio limits or try later.");
+  }
+  if (status === 503) return new GeminiFailure("busy", "Gemini reported high demand. Try again in a moment.");
+  if (status === 408 || status === 504) return new GeminiFailure("timeout", "A Gemini request timed out. Please retry.");
+  if (status === 404 || (status === 403 && /model|tier/i.test(message))) {
+    return new GeminiFailure("unavailable", "A Gemini model is unavailable for this project.");
+  }
+  if (status === 403) return new GeminiFailure("key", "Gemini denied access. Check the API key and project permissions in Settings.");
+  if (status === 400 && /schema|response.?mime.?type|response.?format|thinking.?config|thinking.?level/i.test(message)) {
+    return new GeminiFailure("format", "Gemini rejected the requested response format.");
+  }
+  if (status >= 500) return new GeminiFailure("service", "Gemini reported a temporary service error. Please retry.");
+  return new GeminiFailure("request", `Gemini rejected the request (HTTP ${status}).`);
+}
 
-  for (const model of MODELS) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+function readGeminiOutput(data) {
+  const candidate = data?.candidates?.[0];
+  if (data?.promptFeedback?.blockReason || ["SAFETY", "PROHIBITED_CONTENT", "RECITATION"].includes(candidate?.finishReason)) {
+    throw new GeminiFailure("blocked", "Gemini blocked this request. Try a shorter phrase or a cropped screenshot.");
+  }
+  if (candidate?.finishReason && candidate.finishReason !== "STOP") {
+    throw new GeminiFailure("invalid", "Gemini did not finish its answer.");
+  }
+  const parts = candidate?.content?.parts;
+  const text = Array.isArray(parts) ? parts.filter(part => !part?.thought && typeof part?.text === "string")
+    .map(part => part.text).join("").trim() : "";
+  if (!text) throw new GeminiFailure("invalid", "Gemini returned an empty answer.");
+  return JSON.parse(text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""));
+}
 
-    // Try JSON mode first; if a model returns an empty candidate in JSON mode, retry plain text mode
-    const configsToTry = [
-      { temperature: 0.1, responseMimeType: "application/json" },
-      { temperature: 0.1 }
-    ];
+async function requestGemini(model, key, contents, generationConfig, timeoutMs, validate) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json", "x-goog-api-key": key},
+      signal: controller.signal,
+      body: JSON.stringify({contents, generationConfig})
+    });
+    const data = await response.json().catch(error => {
+      if (controller.signal.aborted) throw error;
+      return null;
+    });
+    if (!response.ok) throw classifyResponse(response.status, data?.error);
+    try {
+      return validate(readGeminiOutput(data));
+    } catch (error) {
+      if (error instanceof GeminiFailure) throw error;
+      const detail = error instanceof SyntaxError ? "Gemini returned malformed JSON." : error.message;
+      throw new GeminiFailure("invalid", detail);
+    }
+  } catch (error) {
+    if (controller.signal.aborted) throw new GeminiFailure("timeout", "A Gemini request timed out. Please retry.");
+    if (error instanceof GeminiFailure) throw error;
+    throw new GeminiFailure("network", "The connection to Gemini failed. Check your internet connection and retry.");
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
-    for (const generationConfig of configsToTry) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 25000);
+async function callGemini(apiKey, contents, schema, validate, plan = TEXT_PLAN) {
+  const key = String(apiKey || "").trim();
+  if (!key) throw new Error("Connect a Gemini API key in Settings first.");
+  const deadline = Date.now() + plan.totalMs;
+  const failures = new Map();
 
+  for (const [index, model] of plan.models.entries()) {
+    const attemptEnd = Math.min(deadline, Date.now() + plan.attemptsMs[index]);
+    if (attemptEnd <= Date.now()) break;
+    const generationConfig = {
+      responseMimeType: "application/json",
+      responseJsonSchema: schema,
+      thinkingConfig: {thinkingLevel: model === FLASH_LITE ? "MINIMAL" : "LOW"}
+    };
+    for (const config of [generationConfig, {}]) {
+      const remaining = attemptEnd - Date.now();
+      if (remaining <= 0) break;
       try {
-        const res = await fetch(url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": cleanKey
-          },
-          signal: controller.signal,
-          body: JSON.stringify({
-            contents,
-            generationConfig
-          })
-        });
-
-        if (!res.ok) {
-          const errBody = await res.json().catch(() => ({}));
-          const msg = errBody?.error?.message || `Gemini HTTP ${res.status}`;
-          lastErr = new Error(msg);
-          clearTimeout(timer);
-          if (res.status === 401 || res.status === 403) {
-            throw lastErr;
-          }
-          break; // Move to next model in MODELS
+        return await requestGemini(model, key, contents, config, remaining, validate);
+      } catch (error) {
+        if (error.kind === "key" || error.kind === "blocked") throw error;
+        // Retry this model without formatting options only if it rejected those options.
+        if (error.kind === "format" && config === generationConfig) {
+          failures.set(error.kind, error.message);
+          continue;
         }
-
-        const data = await res.json();
-        const parsed = extractJsonFromGeminiData(data);
-        clearTimeout(timer);
-        if (parsed) {
-          return parsed;
-        }
-
-        const reason =
-          data?.promptFeedback?.blockReason ||
-          data?.candidates?.[0]?.finishReason ||
-          "empty candidate";
-        lastErr = new Error(`Empty response from Gemini (${model}: ${reason}).`);
-        // Continue to fallback config (plain text mode) before moving to next model
-      } catch (fetchErr) {
-        clearTimeout(timer);
-        lastErr = fetchErr;
-        if (fetchErr.name === "AbortError") {
-          lastErr = new Error(`Model ${model} timed out. Trying fallback...`);
-          break;
-        }
-        if (String(fetchErr.message).includes("API key not valid") || String(fetchErr.message).includes("401") || String(fetchErr.message).includes("403")) {
-          throw fetchErr;
-        }
+        failures.set(error.kind, error.message);
+        break;
       }
     }
   }
-  throw lastErr || new Error("Could not reach Gemini API.");
+
+  const details = [...failures.values()];
+  if (Date.now() >= deadline && !failures.has("timeout")) details.push("The lookup reached its time limit.");
+  throw new Error(details.length ? [...new Set(details)].join(" ") : "Gemini did not complete the request before its time limit.");
 }
 
-export async function testGeminiKey(apiKey) {
-  const parsed = await callGemini(apiKey, [
-    { parts: [{ text: 'Return JSON: {"ok": true, "greeting": "Bonjour !"}' }] }
-  ]);
-  if (parsed?.ok !== true) throw new Error("Gemini did not return a valid verification response.");
-  return true;
+export function testGeminiKey(apiKey) {
+  return callGemini(apiKey, [
+    {parts: [{text: 'Return only JSON: {"ok": true}'}]}
+  ], jsonObject({ok: booleanField}), result => {
+    if (result?.ok !== true) throw new Error("Gemini did not return a valid verification response.");
+    return true;
+  });
 }
 
 export async function lookupVerbWithAI(rawInput, apiKey, { includeCounterpart = false, knownInfinitive, expectedCounterpart } = {}) {
@@ -179,18 +225,35 @@ omitted the pronoun, and set "counterpart" to null. Also use null if no genuine 
 exists or the input is invalid. Never invent a form by adding or removing se/s'.
 Each tense must have exactly six strings, one per person, including only one row for each
 combined il/elle and ils/elles. Put gender/number alternatives in the same string.
-${knownInfinitive ? `Use the already identified infinitive ${JSON.stringify(knownInfinitive)} as "verb".` : ""}
 ${expectedCounterpart ? `The verified other form is ${JSON.stringify(expectedCounterpart)}. Include it in "counterpart".` : ""}
 ` : "";
   const prompt = `You are an expert French linguistics tutor helping a Duolingo French learner.
 Analyze the user's input: ${JSON.stringify(rawInput)}
+${knownInfinitive ? `Use the already identified infinitive ${JSON.stringify(knownInfinitive)} as "verb".` : ""}
 ${VERB_ENTRY_SCHEMA_PROMPT}${pairInstructions}`;
 
-  const result = await callGemini(apiKey, [{ parts: [{ text: prompt }] }]);
-  if (!result.isValidFrenchVerb || !result.verb) {
+  const properties = {
+    isValidFrenchVerb: booleanField, detectedFrom: nullableText, reasonIfInvalid: nullableText, verb: nullableVerb
+  };
+  const required = ["isValidFrenchVerb", "verb"];
+  if (includeCounterpart) {
+    properties.counterpart = nullableVerb;
+    required.push("counterpart");
+  }
+  return callGemini(apiKey, [{parts: [{text: prompt}]}], jsonObject(properties, required), result =>
+    validateLookupResult(result, rawInput, {includeCounterpart, knownInfinitive, expectedCounterpart}));
+}
+
+function validateLookupResult(result, rawInput, {includeCounterpart, knownInfinitive, expectedCounterpart}) {
+  if (typeof result?.isValidFrenchVerb !== "boolean" || !Object.hasOwn(result, "verb")) {
+    throw new Error("Gemini did not say whether it recognized the verb.");
+  }
+  if (!result.isValidFrenchVerb) {
+    if (result.verb !== null || knownInfinitive) throw new Error("Gemini did not return the identified verb.");
     return {
       ok: false,
-      reason: result.reasonIfInvalid || `“${rawInput}” is not recognized as a French verb.`
+      reason: typeof result.reasonIfInvalid === "string" && result.reasonIfInvalid.trim() ||
+        `“${rawInput}” is not recognized as a French verb.`
     };
   }
   let verb = checkedAIVerb(result.verb);
@@ -204,12 +267,13 @@ ${VERB_ENTRY_SCHEMA_PROMPT}${pairInstructions}`;
       }
     }
     if (knownInfinitive && counterpart?.infinitive === knownInfinitive) [verb, counterpart] = [counterpart, verb];
-    if (knownInfinitive && verb.infinitive !== knownInfinitive) throw new Error("Gemini returned a different verb. Please retry.");
-    if (expectedCounterpart && counterpart?.infinitive !== expectedCounterpart) {
-      throw new Error(`Gemini did not return “${expectedCounterpart}”. Please retry.`);
+    const expected = expectedCounterpart || getReflexiveCounterpart(verb.infinitive);
+    if (expected && counterpart?.infinitive !== expected && lookupOfflineVerb(expected).verb?.infinitive !== expected) {
+      throw new Error(`Gemini did not return “${expected}”. Please retry.`);
     }
   }
-  return { ok: true, verb, counterpart, detectedFrom: result.detectedFrom || null };
+  if (knownInfinitive && verb.infinitive !== knownInfinitive) throw new Error("Gemini returned a different verb. Please retry.");
+  return {ok: true, verb, counterpart, detectedFrom: typeof result.detectedFrom === "string" ? result.detectedFrom : null};
 }
 
 function checkedAIVerb(raw) {
@@ -260,13 +324,16 @@ Return ONLY valid JSON with an array "entries", where each item has the exact "v
 Schema reference for each "verb" object:
 ${VERB_ENTRY_SCHEMA_PROMPT}`;
 
-  const result = await callGemini(apiKey, [
-    { parts: [...imageParts, { text: prompt }] }
-  ]);
-  const entries = Array.isArray(result?.entries) ? result.entries : [];
-  return entries.map((item) =>
-    item?.verb ? { ...item, verb: checkedAIVerb(item.verb) } : item
-  );
+  const schema = jsonObject({entries: {type: "array", items: jsonObject({spottedForm: textField, verb: verbSchema})}});
+  return callGemini(apiKey, [{parts: [...imageParts, {text: prompt}]}], schema, result => {
+    if (!Array.isArray(result?.entries)) throw new Error("Gemini did not return a list of verbs from the screenshots.");
+    return result.entries.map(item => {
+      if (typeof item?.spottedForm !== "string" || !item.spottedForm.trim()) {
+        throw new Error("Gemini did not identify a conjugated form in the screenshot.");
+      }
+      return {spottedForm: item.spottedForm, verb: checkedAIVerb(item.verb)};
+    });
+  }, SCREENSHOT_PLAN);
 }
 
 export async function extractVerbsFromWordTextWithAI(docText, apiKey) {
@@ -285,8 +352,10 @@ Document text:
 ${snippet}
 """`;
 
-  const result = await callGemini(apiKey, [{ parts: [{ text: prompt }] }]);
-  return Array.isArray(result?.infinitives)
-    ? result.infinitives.map((s) => String(s || "").toLowerCase().trim()).filter(Boolean)
-    : [];
+  return callGemini(apiKey, [{parts: [{text: prompt}]}], jsonObject({infinitives: textList}), result => {
+    if (!Array.isArray(result?.infinitives) || !result.infinitives.every(value => typeof value === "string" && value.trim())) {
+      throw new Error("Gemini did not return a valid list of verbs from the document.");
+    }
+    return result.infinitives.map(value => value.toLowerCase().trim());
+  });
 }
