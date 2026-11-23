@@ -116,7 +116,7 @@ test("saved conjugations show grouped subject pronouns only in the row labels", 
   expect(await page.evaluate(() => window.lastSpoken)).toBe("il s'inquiète");
 });
 
-test("dispute and occupe add offline with switchable reflexive forms", async ({page, context}) => {
+test("known verb pairs add offline with switchable reflexive forms", async ({page, context}) => {
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("data-ready", "true");
   await context.setOffline(true);
@@ -124,7 +124,9 @@ test("dispute and occupe add offline with switchable reflexive forms", async ({p
 
   for (const [typed, base, reflexive, vousForm] of [
     ["dispute", "disputer", "se disputer", "vous vous êtes disputé(e)(s)*"],
-    ["occupe", "occuper", "s'occuper", "vous vous êtes occupé(e)(s)*"]
+    ["occupe", "occuper", "s'occuper", "vous vous êtes occupé(e)(s)*"],
+    ["derange", "déranger", "se déranger", "vous vous êtes dérangé(e)(s)*"],
+    ["preter", "prêter", "se prêter", "vous vous êtes prêté(e)(s)*"]
   ]) {
     await input.fill(typed);
     await input.press("Enter");
@@ -139,8 +141,31 @@ test("dispute and occupe add offline with switchable reflexive forms", async ({p
     await expect(card.locator(`[data-speak="${vousForm}"]`)).toBeVisible();
   }
 
+  await expect(page.locator("#verb-count-label")).toHaveText("4 verbs saved");
+});
+test("existing déranger and prêter cards gain offline switches while keeping their notes", async ({page, context}) => {
+  const verbs = [OFFLINE_DICTIONARY["déranger"], OFFLINE_DICTIONARY["prêter"]].map(v => ({...v, note: `My note for ${v.infinitive}`}));
+  await page.addInitScript(({stateKey, verbs}) => {
+    localStorage.setItem(stateKey, JSON.stringify({verbs, tombstones: {}}));
+  }, {stateKey, verbs});
+  await page.goto("/");
+  await expect(page.locator("html")).toHaveAttribute("data-ready", "true");
+  await context.setOffline(true);
+
+  const deranger = page.locator('[data-card-inf="déranger"]');
+  await deranger.getByRole("button", {name: "se déranger", exact: true}).click();
+  await expect(deranger.getByRole("heading", {name: "se déranger", exact: true})).toBeVisible();
+  await expect(deranger.getByRole("textbox", {name: "Note for déranger"})).toHaveValue("My note for déranger");
+
+  const field = page.getByRole("searchbox", {name: "French verb", exact: true});
+  await field.fill("se preter");
+  await field.press("Enter");
+  const preter = page.locator('[data-card-inf="prêter"]');
+  await expect(preter.getByRole("heading", {name: "se prêter", exact: true})).toBeVisible();
+  await expect(preter.getByRole("textbox", {name: "Note for prêter"})).toHaveValue("My note for prêter");
   await expect(page.locator("#verb-count-label")).toHaveText("2 verbs saved");
 });
+
 for (const startWithReflexive of [false, true]) {
   const first = startWithReflexive ? "se réconcilier" : "réconcilier";
   const second = startWithReflexive ? "réconcilier" : "se réconcilier";
@@ -208,7 +233,7 @@ for (const startWithReflexive of [false, true]) {
   });
 }
 
-test("a Groq key saved in Settings backs up lookups for déranger, divorcer and s’inquiéter", async ({page}) => {
+test("a Groq key saved in Settings backs up lookups for divorcer and s’inquiéter", async ({page}) => {
   await page.addInitScript(() => {
     sessionStorage.setItem("carnet_de_verbes_settings_v1", JSON.stringify({geminiKey: "mock-gemini"}));
   });
@@ -220,15 +245,10 @@ test("a Groq key saved in Settings backs up lookups for déranger, divorcer and 
       ]))
     };
   }
-  const deranger = fixture(OFFLINE_DICTIONARY.manger, "mang", "dérang", "déranger", "to disturb", "dérangé");
-  const seDeranger = fixture(lookupOfflineVerb("se disputer").verb, "disput", "dérang", "se déranger", "to go out of one's way", "dérangé");
-  seDeranger.tenses.present[3] = "nous nous dérangeons";
-  seDeranger.tenses.imparfait = seDeranger.tenses.imparfait.map(form => form.replace("dérangai", "dérangeai"));
   const divorcer = fixture(OFFLINE_DICTIONARY.commencer, "commen", "divor", "divorcer", "to get divorced", "divorcé");
   const inquieter = fixture(OFFLINE_DICTIONARY.regarder, "regard", "inquiét", "inquiéter", "to worry someone", "inquiété");
   inquieter.tenses.present = ["j'inquiète", "tu inquiètes", "il/elle inquiète", "nous inquiétons", "vous inquiétez", "ils/elles inquiètent"];
   const responses = {
-    "derange": {verb: deranger, counterpart: seDeranger},
     "divorcent": {verb: divorcer, counterpart: null},
     "s’inquiéter": {verb: lookupOfflineVerb("s'inquiéter").verb, counterpart: inquieter}
   };
@@ -263,7 +283,6 @@ test("a Groq key saved in Settings backs up lookups for déranger, divorcer and 
 
   const field = page.getByRole("searchbox", {name: "French verb", exact: true});
   for (const [input, infinitive, counterpart, present] of [
-    ["derange", "déranger", "se déranger", "dérange"],
     ["divorcent", "divorcer", null, "divorce"],
     ["s’inquiéter", "s'inquiéter", "inquiéter", "m'inquiète"]
   ]) {
@@ -276,9 +295,9 @@ test("a Groq key saved in Settings backs up lookups for déranger, divorcer and 
     if (counterpart) await expect(card.getByRole("button", {name: counterpart, exact: true})).toBeVisible();
     else await expect(card.locator(".variant-switch")).toHaveCount(0);
   }
-  expect(groqInputs).toEqual(["derange", "divorcent", "s’inquiéter"]);
-  expect(geminiAttempts).toBe(9);
-  await expect(page.locator("#verb-count-label")).toHaveText("3 verbs saved");
+  expect(groqInputs).toEqual(["divorcent", "s’inquiéter"]);
+  expect(geminiAttempts).toBe(6);
+  await expect(page.locator("#verb-count-label")).toHaveText("2 verbs saved");
 });
 
 test("an invalid screenshot result falls back to Hydrogen before saving a card", async ({page}) => {

@@ -6,7 +6,7 @@ import { mergeNotebookStates, syncWithGitHubGist, saveLocalState, loadLocalState
 import { generateDocxBlob, extractTextFromDocx } from "../js/word-io.js";
 const verb = () => structuredClone(OFFLINE_DICTIONARY.prendre);
 test("all offline entries satisfy external-data schema", () => {
-  assert.equal(Object.keys(OFFLINE_DICTIONARY).length, 141);
+  assert.equal(Object.keys(OFFLINE_DICTIONARY).length, 143);
   Object.values(OFFLINE_DICTIONARY).forEach(v => validateVerb(v));
 });
 test("individual third-person subjects and reflexives resolve", () => {

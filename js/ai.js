@@ -1,9 +1,9 @@
-import { TENSE_KEYS, validateVerb } from "./validation.js?v=36";
+import { TENSE_KEYS, validateVerb } from "./validation.js?v=37";
 // ==========================================================================
 // Live Google Gemini AI Integration (Verb Lookup, Screenshot Vision, Word Import)
 // ==========================================================================
 
-import { areVerbCounterparts, getReflexiveCounterpart, lookupOfflineVerb, normalizeVerbEntry, stripAccents } from "./french-engine.js?v=36";
+import { areVerbCounterparts, getReflexiveCounterpart, lookupOfflineVerb, normalizeVerbEntry, stripAccents } from "./french-engine.js?v=37";
 
 const FLASH_LITE = "gemini-3.5-flash-lite";
 const HYDROGEN = "gemini-4-hydrogen";

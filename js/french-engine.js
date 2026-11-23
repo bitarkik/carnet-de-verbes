@@ -694,6 +694,15 @@ const SPECS = {
   "écouter": { m: "to listen to", tipPrep: "No 'à'! 'J'écoute un podcast' = I listen TO a podcast.", ex: ["J'écoute la radio dans la voiture.", "I listen to the radio in the car."] },
   "marcher": { m: "to walk / to work (function)", tipExtra: "'Ça marche !' is super common in French for 'That works / Sounds good!'", ex: ["Nous marchons le long de la rivière.", "We walk along the river."] },
   "cuisiner": { m: "to cook", ex: ["J'aime cuisiner pour mes amis.", "I love cooking for my friends."] },
+  "déranger": {
+    m: "to disturb / to bother",
+    ex: ["Excusez-moi de vous déranger.", "Sorry to bother you."]
+  },
+  "prêter": {
+    m: "to lend",
+    tipPrep: "prêter quelque chose à quelqu'un = to lend something to someone.",
+    ex: ["Je peux te prêter mon livre.", "I can lend you my book."]
+  },
   "disputer": {
     m: "to contest / to scold (informal)",
     ex: ["Les deux équipes disputent la finale.", "The two teams are playing in the final."]
@@ -824,6 +833,15 @@ const REFLEXIVE_INFO = {
     }
   },
   "se méfier": { m: "to distrust / to be wary of", tipPrep: "se méfier de quelque chose ou de quelqu’un.", ex: ["Elle se méfie des promesses trop belles.", "She is wary of promises that sound too good."] },
+  "se déranger": {
+    m: "to go out of one's way / to take the trouble",
+    ex: ["Merci de vous être dérangé pour moi.", "Thank you for going out of your way for me."]
+  },
+  "se prêter": {
+    m: "to lend itself to / to agree to take part in",
+    tipPrep: "se prêter à quelque chose = to lend itself to something or to go along with it.",
+    ex: ["Ce sujet se prête bien à la discussion.", "This topic lends itself well to discussion."]
+  },
   "se disputer": {
     m: "to argue / to quarrel",
     tipPrep: "se disputer avec quelqu'un = to argue with someone.",
@@ -955,7 +973,8 @@ export function lookupOfflineVerb(rawInput) {
   // reflexive entry instead; if the base isn't offline either, do NOT fall
   // through to it — let the AI fallback handle it (or say so honestly).
   if (cleaned.startsWith("se ") || cleaned.startsWith("s'")) {
-    const built = buildReflexiveFromBase(cleaned);
+    const infinitive = Object.keys(REFLEXIVE_INFO).find(inf => stripAccents(inf) === unaccented) || cleaned;
+    const built = buildReflexiveFromBase(infinitive);
     if (built) {
       return { ok: true, verb: built, detectedFrom: null };
     }
@@ -1223,6 +1242,8 @@ const REFLEXIVE_TWINS = {
   "marier": "se marier",
   "maquiller": "se maquiller",
   "mettre": "se mettre",
+  "déranger": "se déranger",
+  "prêter": "se prêter",
   "disputer": "se disputer",
   "occuper": "s'occuper",
   "perdre": "se perdre",

@@ -7,11 +7,11 @@ document.getElementById("download").onclick = () => {
 };
 document.getElementById("update").onclick = async () => {
  try {
-  const reg=await navigator.serviceWorker.register("./sw.js?v=36",{updateViaCache:"none"});
+  const reg=await navigator.serviceWorker.register("./sw.js?v=37",{updateViaCache:"none"});
   await reg.update();
   const worker=reg.installing || reg.waiting;
   if(worker && worker.state!=="activated") await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error("Update is taking longer than expected. Try again while online.")),30000);worker.addEventListener("statechange",()=>{if(worker.state==="activated"){clearTimeout(timer);resolve();}if(worker.state==="redundant"){clearTimeout(timer);reject(Error("Update failed; try again."));}});});
-  location.replace("./?updated=36");
+  location.replace("./?updated=37");
  } catch(e){status.textContent=e.message;}
 };
 </script></body></html>
