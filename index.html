@@ -12,7 +12,7 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./assets/icon-192.png" />
   <link rel="apple-touch-icon" href="./assets/icon-180.png" />
   <link rel="manifest" href="./manifest.webmanifest" />
-  <link rel="stylesheet" href="./css/styles.css?v=35" />
+  <link rel="stylesheet" href="./css/styles.css?v=36" />
 </head>
 <body>
   <div class="wrap">
@@ -262,6 +262,19 @@
           <input id="drawer-gemini-key" aria-label="Gemini API key" type="password" placeholder="AIzaSy..." autocomplete="off" />
           <button id="drawer-test-key-btn" type="button" class="add-btn small">Save</button>
         </div>
+        <p id="drawer-gemini-status" class="drawer-help" role="status"></p>
+      </div>
+
+      <div class="drawer-section">
+        <div class="lbl">Groq (Optional Verb Lookup Backup)</div>
+        <p class="drawer-help">
+          Add your own <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer">Groq API key</a> for typed lookups when Gemini is unavailable. Those lookups send the text to Groq. Screenshot scans and AI Word import use Gemini.
+        </p>
+        <div class="input-with-btn">
+          <input id="drawer-groq-key" aria-label="Groq API key" type="password" placeholder="gsk_..." autocomplete="off" />
+          <button id="drawer-groq-save-btn" type="button" class="add-btn small" aria-label="Save Groq API key">Save</button>
+        </div>
+        <p id="drawer-groq-status" class="drawer-help" role="status"></p>
       </div>
 
       <label class="drawer-help"><input id="remember-credentials" type="checkbox" /> Remember credentials on this device</label>
@@ -280,15 +293,15 @@
           <span class="status-indicator"></span>
           <div>
             <strong>141-verb offline starter pack active.</strong><br />
-            Connect a free Gemini key above for additional French verbs and live Duolingo screenshot scanning.
+            Connect Gemini or Groq for more French verbs. Gemini also supports screenshot scanning.
           </div>
         </div>
 
         <div id="drawer-online-note" class="drawer-status-box online hidden">
           <span class="status-indicator green"></span>
           <div>
-            <strong>● Gemini AI Active</strong><br />
-            Additional French verbs &amp; Duolingo screenshot scanning are ready on your phone and laptop.
+            <strong id="drawer-ai-title"></strong><br />
+            <span id="drawer-ai-detail"></span>
           </div>
         </div>
       </div>
@@ -334,7 +347,7 @@
   <input id="import-docx-file-input" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="hidden" />
   <input id="import-json-file-input" type="file" accept=".json,application/json" class="hidden" />
 
-  <script src="./js/updates.js?v=35"></script>
-  <script type="module" src="./js/app.js?v=35"></script>
+  <script src="./js/updates.js?v=36"></script>
+  <script type="module" src="./js/app.js?v=36"></script>
 </body>
 </html>

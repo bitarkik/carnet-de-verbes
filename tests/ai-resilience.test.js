@@ -95,3 +95,64 @@ test("a valid no-match reply needs no fallback", async t => {
   assert.equal(result.ok, false);
   assert.equal(calls.length, 1);
 });
+
+test("Groq gets the remaining twelve seconds after stalled Gemini attempts", async t => {
+  t.mock.timers.enable({apis: ["Date", "setTimeout"], now: 100000});
+  const calls = [];
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    const groq = new URL(url).hostname === "api.groq.com";
+    calls.push({provider: groq ? "Groq" : apiModel(url), at: Date.now(), headers: options.headers});
+    return new Promise((_, reject) => {
+      options.signal.addEventListener("abort", () => reject(options.signal.reason), {once: true});
+    });
+  });
+  const lookup = lookupVerbWithAI("dérange", "google-key", {includeCounterpart: true, groqKey: "groq-key"});
+  const rejected = assert.rejects(lookup, /Also tried Groq.*Groq request timed out/);
+  for (const elapsed of [8000, 5000, 5000, 12000]) {
+    await nextTurn();
+    t.mock.timers.tick(elapsed);
+  }
+  await rejected;
+  assert.deepEqual(calls.map(({provider, at}) => [provider, at - 100000]), [
+    [models[0], 0], [models[1], 8000], [models[2], 13000], ["Groq", 18000]
+  ]);
+  assert.ok(calls.slice(0, 3).every(call => !call.headers.Authorization && call.headers["x-goog-api-key"] === "google-key"));
+  assert.equal(calls[3].headers.Authorization, "Bearer groq-key");
+  assert.equal(calls[3].headers["x-goog-api-key"], undefined);
+  assert.equal(Date.now(), 130000);
+});
+
+function groqAnswer(result) {
+  return Response.json({choices: [{message: {content: JSON.stringify(result)}, finish_reason: "stop"}]});
+}
+
+test("Groq alone supports lookup, and retrying a rejected schema still validates conjugations", async t => {
+  const calls = [];
+  const invalid = {...OFFLINE_DICTIONARY.aller, tenses: {...OFFLINE_DICTIONARY.aller.tenses, present: ["je vais"]}};
+  t.mock.method(globalThis, "fetch", async (url, {body}) => {
+    assert.equal(new URL(url).hostname, "api.groq.com");
+    const request = JSON.parse(body);
+    calls.push(request);
+    if (calls.length === 1) return refused(400, "response_format schema not supported");
+    return groqAnswer(entry(invalid));
+  });
+  await assert.rejects(lookupVerbWithAI("aller", "", {includeCounterpart: true, groqKey: "groq-key"}), /Invalid conjugations for aller/);
+  assert.equal(calls[0].model, "openai/gpt-oss-20b");
+  const schema = calls[0].response_format.json_schema;
+  assert.equal(schema.strict, true);
+  assert.equal(schema.schema.additionalProperties, false);
+  assert.equal(schema.schema.properties.verb.anyOf[0].additionalProperties, false);
+  assert.ok(schema.schema.required.includes("counterpart"));
+  assert.equal(calls[1].response_format.type, "json_object");
+});
+
+test("a valid Gemini result never contacts configured Groq", async t => {
+  const calls = [];
+  t.mock.method(globalThis, "fetch", async url => {
+    calls.push(new URL(url).hostname);
+    return answer(entry(OFFLINE_DICTIONARY.aller));
+  });
+  const result = await lookupVerbWithAI("aller", "google-key", {groqKey: "groq-key", includeCounterpart: true});
+  assert.equal(result.verb.infinitive, "aller");
+  assert.deepEqual(calls, ["generativelanguage.googleapis.com"]);
+});

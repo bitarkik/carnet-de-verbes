@@ -1,4 +1,4 @@
-import { validateState } from "./validation.js?v=35";
+import { validateState } from "./validation.js?v=36";
 // ==========================================================================
 // Local Auto-Save + 2-Way GitHub Gist Cloud Sync (Phone <-> Laptop)
 // ==========================================================================
@@ -42,15 +42,16 @@ export function loadSettings() {
     const session = JSON.parse(sessionStorage.getItem(SETTINGS_KEY) || "{}");
     const parsed = { ...stored, ...session };
     return {
-      rememberCredentials: parsed.rememberCredentials ?? Boolean(stored.geminiKey || stored.githubToken),
+      rememberCredentials: parsed.rememberCredentials ?? Boolean(stored.geminiKey || stored.groqKey || stored.githubToken),
       geminiKey: parsed.geminiKey || "",
+      groqKey: parsed.groqKey || "",
       githubToken: parsed.githubToken || "",
       gistId: parsed.gistId || "",
       theme: parsed.theme || "light",
       lastSyncedAt: parsed.lastSyncedAt || null
     };
   } catch {
-    return { rememberCredentials: false, geminiKey: "", githubToken: "", gistId: "", theme: "light", lastSyncedAt: null };
+    return { rememberCredentials: false, geminiKey: "", groqKey: "", githubToken: "", gistId: "", theme: "light", lastSyncedAt: null };
   }
 }
 
@@ -59,6 +60,7 @@ export function saveSettings(settings) {
     const persisted = { ...settings };
     if (!settings.rememberCredentials) {
       delete persisted.geminiKey;
+      delete persisted.groqKey;
       delete persisted.githubToken;
       sessionStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     } else sessionStorage.removeItem(SETTINGS_KEY);

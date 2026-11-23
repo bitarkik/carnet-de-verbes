@@ -75,11 +75,17 @@ test("startup keeps the first counterpart, drops deeper copies, and preserves th
 });
 test("credentials are session-only unless explicitly remembered",()=>{
   globalThis.localStorage=storage();globalThis.sessionStorage=storage();
-  saveSettings({geminiKey:"test-key",githubToken:"test-token",rememberCredentials:false});
-  assert.ok(!localStorage.getItem("carnet_de_verbes_settings_v1").includes("test-key"));
-  assert.equal(loadSettings().geminiKey,"test-key");
-  saveSettings({geminiKey:"test-key",githubToken:"test-token",rememberCredentials:true});
-  assert.ok(localStorage.getItem("carnet_de_verbes_settings_v1").includes("test-key"));
+  const state = {geminiKey: "test-key", groqKey: "test-groq", githubToken: "test-token", rememberCredentials: false};
+  const key = "carnet_de_verbes_settings_v1";
+  saveSettings(state);
+  assert.equal(JSON.parse(localStorage.getItem(key)).geminiKey, undefined);
+  assert.equal(JSON.parse(localStorage.getItem(key)).groqKey, undefined);
+  assert.equal(loadSettings().geminiKey, state.geminiKey);
+  assert.equal(loadSettings().groqKey, state.groqKey);
+  saveSettings({...state, rememberCredentials: true});
+  assert.equal(JSON.parse(localStorage.getItem(key)).geminiKey, state.geminiKey);
+  assert.equal(JSON.parse(localStorage.getItem(key)).groqKey, state.groqKey);
+  assert.equal(sessionStorage.getItem(key), null);
 });
 
 test("Gemini key validation rejects false success and keeps keys out of URLs", async()=>{

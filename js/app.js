@@ -1,4 +1,4 @@
-import { validateVerb, validateState } from "./validation.js?v=35";
+import { validateVerb, validateState } from "./validation.js?v=36";
 // ==========================================================================
 // Carnet de Verbes — Clean Accordion Notebook Controller (Muse-Inspired)
 // ==========================================================================
@@ -11,16 +11,17 @@ import {
   getReflexiveCounterpart,
   areVerbCounterparts,
   isReflexiveOnly
-} from "./french-engine.js?v=35";
+} from "./french-engine.js?v=36";
 import {
   testGeminiKey,
+  testGroqKey,
   lookupVerbWithAI,
   extractVerbsFromScreenshots,
   extractVerbsFromWordTextWithAI
-} from "./ai.js?v=35";
-import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=35";
-import { loadLocalState, saveLocalState, loadSettings, saveSettings as writeSettings, syncWithGitHubGist, mergeNotebookStates } from "./sync.js?v=35";
-import { createPracticeController } from "./practice.js?v=35";
+} from "./ai.js?v=36";
+import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=36";
+import { loadLocalState, saveLocalState, loadSettings, saveSettings as writeSettings, syncWithGitHubGist, mergeNotebookStates } from "./sync.js?v=36";
+import { createPracticeController } from "./practice.js?v=36";
 
 const TENSES = [
   { key: "present", label: "Présent" },
@@ -144,12 +145,19 @@ function applyTheme(theme) {
 }
 
 function updateDrawerNotes() {
-  const hasAI = Boolean(settings.geminiKey?.trim());
+  const hasGemini = Boolean(settings.geminiKey?.trim());
+  const hasGroq = Boolean(settings.groqKey?.trim());
+  const hasAI = hasGemini || hasGroq;
   $("drawer-offline-note").classList.toggle("hidden", hasAI);
   $("drawer-online-note").classList.toggle("hidden", !hasAI);
+  $("drawer-ai-title").textContent = hasGemini && hasGroq ? "Gemini with Groq backup" : hasGemini ? "Gemini active" : "Groq active";
+  $("drawer-ai-detail").textContent = hasGemini
+    ? "Online verb lookup and screenshot scanning are ready."
+    : "Online verb lookup is ready. Connect Gemini for screenshot scanning and AI Word import.";
 
   $("remember-credentials").checked = settings.rememberCredentials;
   $("drawer-gemini-key").value = settings.geminiKey || "";
+  $("drawer-groq-key").value = settings.groqKey || "";
   $("drawer-github-token").value = settings.githubToken || "";
   $("drawer-sync-status").textContent = settings.lastSyncedAt
     ? `Last synced: ${new Date(settings.lastSyncedAt).toLocaleTimeString()}`
@@ -281,9 +289,10 @@ function offlineCounterpart(infinitive) {
 async function resolveAddedVerb(input, knownVerb) {
   const offline = knownVerb ? {ok: true, verb: knownVerb} : lookupOfflineVerb(input);
   const apiKey = settings.geminiKey?.trim();
+  const groqKey = settings.groqKey?.trim();
   if (!offline.ok) {
-    if (!apiKey) return offline;
-    const result = await lookupVerbWithAI(input, apiKey, {includeCounterpart: true});
+    if (!apiKey && !groqKey) return offline;
+    const result = await lookupVerbWithAI(input, apiKey, {includeCounterpart: true, groqKey});
     if (!result.ok || result.counterpart) return result;
     const counterpart = offlineCounterpart(result.verb.infinitive);
     if (counterpart) return {...result, counterpart};
@@ -301,17 +310,17 @@ async function resolveAddedVerb(input, knownVerb) {
   }
 
   const expectedCounterpart = getReflexiveCounterpart(verb.infinitive);
-  if (!apiKey) {
-    const warning = expectedCounterpart ? `Connect Gemini to load “${expectedCounterpart}”.` : null;
+  if (!apiKey && !groqKey) {
+    const warning = expectedCounterpart ? `Connect Gemini or Groq to load “${expectedCounterpart}”.` : null;
     return {...offline, warning};
   }
 
   try {
     const result = await lookupVerbWithAI(input, apiKey, {
-      includeCounterpart: true, knownInfinitive: verb.infinitive, expectedCounterpart
+      includeCounterpart: true, groqKey, knownInfinitive: verb.infinitive, expectedCounterpart
     });
     if (!result.ok) throw new Error(result.reason);
-    return {...offline, counterpart: result.counterpart};
+    return {...offline, counterpart: result.counterpart, provider: result.provider};
   } catch (error) {
     return {...offline, warning: `Couldn't check both forms. ${error.message}`};
   }
@@ -410,7 +419,8 @@ async function handleAddVerb(rawText) {
     const status = pair ? `Both forms are in your notebook: ${card.infinitive} and ${pair.infinitive}.` :
       alreadyExisted ? `${selected.infinitive} is already in your notebook — opened here.` :
       `${selected.infinitive} added to your notebook ✓`;
-    showMsg(result.warning ? `${status} ${result.warning}` : status, {isError: Boolean(result.warning)});
+    const detail = result.warning || (result.provider === "Groq" ? "Lookup completed using Groq." : "");
+    showMsg(detail ? `${status} ${detail}` : status, {isError: Boolean(result.warning)});
     const heading = document.querySelector(`[data-accordion="${CSS.escape(card.infinitive)}"]`);
     heading?.focus({preventScroll: true});
     requestAnimationFrame(() => {
@@ -563,15 +573,17 @@ async function switchCardVariant(cardInfinitive, targetInfinitive, btnEl) {
     return;
   }
 
-  // 4. Gemini AI fallback if key is set
-  if (settings.geminiKey?.trim()) {
+  // 4. Look up an unavailable variant with the configured text providers.
+  const apiKey = settings.geminiKey?.trim();
+  const groqKey = settings.groqKey?.trim();
+  if (apiKey || groqKey) {
     const origText = btnEl ? btnEl.textContent : "";
     if (btnEl) {
       btnEl.disabled = true;
       btnEl.textContent = "Loading...";
     }
     try {
-      const aiRes = await lookupVerbWithAI(targetInfinitive, settings.geminiKey.trim(), {knownInfinitive: targetInfinitive});
+      const aiRes = await lookupVerbWithAI(targetInfinitive, apiKey, {knownInfinitive: targetInfinitive, groqKey});
       if (!aiRes.ok) {
         showMsg(aiRes.reason, { isError: true });
         return;
@@ -592,7 +604,7 @@ async function switchCardVariant(cardInfinitive, targetInfinitive, btnEl) {
     return;
   }
 
-  showMsg(`Connect a Gemini API key in Settings (•••) to load “${targetInfinitive}”.`, { isError: true });
+  showMsg(`Connect a Gemini or Groq API key in Settings (•••) to load “${targetInfinitive}”.`, { isError: true });
 }
 
 // ---------- Main Render (Accordion Cards) ----------
@@ -1264,31 +1276,29 @@ function init() {
     runCloudSync({ quiet: false });
   });
 
-  $("drawer-test-key-btn").addEventListener("click", async () => {
-    const key = $("drawer-gemini-key").value.trim();
-    if (!key) {
-      settings.geminiKey = "";
-      saveSettings(settings);
-      updateDrawerNotes();
-      showMsg("Gemini API key cleared.");
-      return;
-    }
-    const btn = $("drawer-test-key-btn");
-    btn.disabled = true;
-    btn.textContent = "...";
-    try {
-      await testGeminiKey(key);
-      settings.geminiKey = key;
-      saveSettings(settings);
-      updateDrawerNotes();
-      showMsg("✓ Gemini API key verified & saved!");
-    } catch (err) {
-      showMsg(`Key error: ${err.message}`, { isError: true });
-    } finally {
-      btn.disabled = false;
-      btn.textContent = "Save";
-    }
-  });
+  for (const [provider, field, buttonId, statusId, verify] of [
+    ["Gemini", "geminiKey", "drawer-test-key-btn", "drawer-gemini-status", testGeminiKey],
+    ["Groq", "groqKey", "drawer-groq-save-btn", "drawer-groq-status", testGroqKey]
+  ]) {
+    const button = $(buttonId);
+    const status = $(statusId);
+    button.addEventListener("click", async () => {
+      const key = $(`drawer-${provider.toLowerCase()}-key`).value.trim();
+      button.disabled = true;
+      status.textContent = key ? `Checking ${provider} key…` : "";
+      try {
+        if (key) await verify(key);
+        writeSettings({...settings, [field]: key});
+        settings[field] = key;
+        updateDrawerNotes();
+        status.textContent = key ? `${provider} key verified and saved.` : `${provider} key cleared.`;
+      } catch (error) {
+        status.textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
+  }
 
   $("drawer-theme-btn").addEventListener("click", () => {
     applyTheme(settings.theme === "dark" ? "light" : "dark");
@@ -1356,7 +1366,7 @@ function init() {
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register("./sw.js?v=35")
+        .register("./sw.js?v=36")
         .then((reg) => {
           reg.update().catch(() => {});
           // Listen for updates and automatically refresh if new version found

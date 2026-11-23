@@ -814,7 +814,15 @@ const REFLEXIVE_INFO = {
   "se plaindre": { m: "to complain", tipPrep: "se plaindre de qqch.", ex: ["Il se plaint du bruit.", "He complains about the noise."] },
   "se retrouver": { m: "to meet up / to find oneself", ex: ["On se retrouve au café ?", "Shall we meet at the café?"] },
   "se marier": { m: "to get married", ex: ["Ils se marient en juin.", "They're getting married in June."] },
-  "s'inquiéter": { m: "to worry", ex: ["Ne t'inquiète pas.", "Don't worry."] },
+  "s'inquiéter": {
+    m: "to worry",
+    ex: ["Ne t'inquiète pas.", "Don't worry."],
+    conjugation: {
+      pres: ["inquiète", "inquiètes", "inquiète", "inquiétons", "inquiétez", "inquiètent"],
+      presMark: [true, true, true, false, false, true],
+      impStem: "inquiét", futStem: "inquiéter", pp: "inquiété", group: "1st group · Reflexive stem-changing -er"
+    }
+  },
   "se méfier": { m: "to distrust / to be wary of", tipPrep: "se méfier de quelque chose ou de quelqu’un.", ex: ["Elle se méfie des promesses trop belles.", "She is wary of promises that sound too good."] },
   "se disputer": {
     m: "to argue / to quarrel",
@@ -859,6 +867,7 @@ function buildReflexiveFromBase(reflexiveInf) {
   if (!SPECS[base]) {
     if (!info.m || !base.endsWith("er")) return null;
     return buildFromSpec(inf, {
+      ...info.conjugation,
       m: info.m,
       ex: info.ex || [`Je pratique le verbe « ${inf} ».`, `Meaning: ${info.m}.`],
       tipPrep: info.tipPrep,
@@ -953,7 +962,7 @@ export function lookupOfflineVerb(rawInput) {
     return {
       ok: false,
       needsAI: true,
-      reason: `“${rawInput.trim()}” isn't in the offline starter pack yet — connect your free Gemini API key in Settings to generate it!`
+      reason: `“${rawInput.trim()}” isn't in the offline starter pack yet — connect Gemini or Groq in Settings to look it up.`
     };
   }
 
@@ -985,7 +994,7 @@ export function lookupOfflineVerb(rawInput) {
       }
     }
     // Preserve an explicit reflexive construction for the AI lookup.
-    return { ok: false, needsAI: true, reason: `Connect Gemini to look up “${rawInput.trim()}” as a reflexive verb.` };
+    return { ok: false, needsAI: true, reason: `Connect Gemini or Groq to look up “${rawInput.trim()}” as a reflexive verb.` };
   }
 
   // 3. Scan 3-word, 2-word, and 1-word tokens inside a Duolingo phrase (e.g. "nous avons pris le train")
@@ -1046,8 +1055,8 @@ export function lookupOfflineVerb(rawInput) {
     ok: false,
     needsAI: looksVerbish,
     reason: looksVerbish
-      ? `“${rawInput.trim()}” isn't in the 90+ verb offline starter pack yet — connect your free Gemini API key in Settings to generate any of 12,000+ French verbs!`
-      : `“${rawInput.trim()}” doesn't look like a French verb (nothing fake saved!). Connect Gemini AI in Settings if it's a rare conjugated form.`
+      ? `“${rawInput.trim()}” isn't in the offline dictionary. Connect Gemini or Groq in Settings to look it up.`
+      : `“${rawInput.trim()}” wasn't recognized offline. Connect Gemini or Groq in Settings to check this form.`
   };
 }
 

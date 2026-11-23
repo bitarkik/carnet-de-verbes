@@ -208,6 +208,79 @@ for (const startWithReflexive of [false, true]) {
   });
 }
 
+test("a Groq key saved in Settings backs up lookups for déranger, divorcer and s’inquiéter", async ({page}) => {
+  await page.addInitScript(() => {
+    sessionStorage.setItem("carnet_de_verbes_settings_v1", JSON.stringify({geminiKey: "mock-gemini"}));
+  });
+  function fixture(template, from, to, infinitive, meaning, pastParticiple) {
+    return {
+      infinitive, meaning, pastParticiple, auxiliary: template.auxiliary, isReflexive: template.isReflexive,
+      tenses: Object.fromEntries(Object.entries(template.tenses).map(([tense, forms]) => [
+        tense, forms.map(form => form.replaceAll(from, to).replace(/^je inqui/, "j'inqui"))
+      ]))
+    };
+  }
+  const deranger = fixture(OFFLINE_DICTIONARY.manger, "mang", "dérang", "déranger", "to disturb", "dérangé");
+  const seDeranger = fixture(lookupOfflineVerb("se disputer").verb, "disput", "dérang", "se déranger", "to go out of one's way", "dérangé");
+  seDeranger.tenses.present[3] = "nous nous dérangeons";
+  seDeranger.tenses.imparfait = seDeranger.tenses.imparfait.map(form => form.replace("dérangai", "dérangeai"));
+  const divorcer = fixture(OFFLINE_DICTIONARY.commencer, "commen", "divor", "divorcer", "to get divorced", "divorcé");
+  const inquieter = fixture(OFFLINE_DICTIONARY.regarder, "regard", "inquiét", "inquiéter", "to worry someone", "inquiété");
+  inquieter.tenses.present = ["j'inquiète", "tu inquiètes", "il/elle inquiète", "nous inquiétons", "vous inquiétez", "ils/elles inquiètent"];
+  const responses = {
+    "derange": {verb: deranger, counterpart: seDeranger},
+    "divorcent": {verb: divorcer, counterpart: null},
+    "s’inquiéter": {verb: lookupOfflineVerb("s'inquiéter").verb, counterpart: inquieter}
+  };
+
+  let geminiAttempts = 0;
+  const groqInputs = [];
+  await page.route("https://generativelanguage.googleapis.com/**", async route => {
+    geminiAttempts++;
+    expect(route.request().headers()["x-goog-api-key"]).toBe("mock-gemini");
+    expect(route.request().headers().authorization).toBeUndefined();
+    await route.fulfill({status: 503, json: {error: {message: "High demand"}}});
+  });
+  await page.route("https://api.groq.com/openai/v1/chat/completions", async route => {
+    const request = route.request();
+    expect(request.headers().authorization).toBe("Bearer mock-groq");
+    expect(request.headers()["x-goog-api-key"]).toBeUndefined();
+    const {model, messages} = request.postDataJSON();
+    expect(model).toBe("openai/gpt-oss-20b");
+    const input = Object.keys(responses).find(value => messages[0].content.includes(`input: ${JSON.stringify(value)}`));
+    if (input) groqInputs.push(input);
+    const result = input ? {isValidFrenchVerb: true, ...responses[input]} : {ok: true};
+    await route.fulfill({json: {choices: [{message: {content: JSON.stringify(result)}, finish_reason: "stop"}]}});
+  });
+
+  await page.goto("/");
+  await expect(page.locator("html")).toHaveAttribute("data-ready", "true");
+  await page.getByRole("button", {name: "Menu and settings"}).click();
+  await page.getByLabel("Groq API key", {exact: true}).fill("mock-groq");
+  await page.getByRole("button", {name: "Save Groq API key"}).click();
+  await expect(page.locator("#drawer-groq-status")).toHaveText("Groq key verified and saved.");
+  await page.getByRole("button", {name: "Close menu"}).click();
+
+  const field = page.getByRole("searchbox", {name: "French verb", exact: true});
+  for (const [input, infinitive, counterpart, present] of [
+    ["derange", "déranger", "se déranger", "dérange"],
+    ["divorcent", "divorcer", null, "divorce"],
+    ["s’inquiéter", "s'inquiéter", "inquiéter", "m'inquiète"]
+  ]) {
+    await field.fill(input);
+    await field.press("Enter");
+    const card = page.locator(`[data-card-inf="${infinitive}"]`);
+    await expect(card.getByRole("heading", {name: infinitive, exact: true})).toBeVisible();
+    await expect(card.locator(".conj-verb").first()).toHaveText(present);
+    await expect(page.locator("#status-msg-text")).toContainText("Lookup completed using Groq.");
+    if (counterpart) await expect(card.getByRole("button", {name: counterpart, exact: true})).toBeVisible();
+    else await expect(card.locator(".variant-switch")).toHaveCount(0);
+  }
+  expect(groqInputs).toEqual(["derange", "divorcent", "s’inquiéter"]);
+  expect(geminiAttempts).toBe(9);
+  await expect(page.locator("#verb-count-label")).toHaveText("3 verbs saved");
+});
+
 test("an invalid screenshot result falls back to Hydrogen before saving a card", async ({page}) => {
   await page.addInitScript(() => {
     sessionStorage.setItem("carnet_de_verbes_settings_v1", JSON.stringify({geminiKey: "test-key"}));

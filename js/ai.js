@@ -1,14 +1,16 @@
-import { TENSE_KEYS, validateVerb } from "./validation.js?v=35";
+import { TENSE_KEYS, validateVerb } from "./validation.js?v=36";
 // ==========================================================================
 // Live Google Gemini AI Integration (Verb Lookup, Screenshot Vision, Word Import)
 // ==========================================================================
 
-import { areVerbCounterparts, getReflexiveCounterpart, lookupOfflineVerb, normalizeVerbEntry, stripAccents } from "./french-engine.js?v=35";
+import { areVerbCounterparts, getReflexiveCounterpart, lookupOfflineVerb, normalizeVerbEntry, stripAccents } from "./french-engine.js?v=36";
 
 const FLASH_LITE = "gemini-3.5-flash-lite";
 const HYDROGEN = "gemini-4-hydrogen";
 const FLASH = "gemini-3.8-flash";
 const TEXT_PLAN = {models: [FLASH_LITE, HYDROGEN, FLASH], totalMs: 30000, attemptsMs: [9000, 10000, 11000]};
+const TEXT_WITH_GROQ_PLAN = {...TEXT_PLAN, totalMs: 18000, attemptsMs: [8000, 5000, 5000]};
+const GROQ_MODEL = "openai/gpt-oss-20b";
 const SCREENSHOT_PLAN = {models: [FLASH, HYDROGEN, FLASH_LITE], totalMs: 60000, attemptsMs: [22000, 20000, 18000]};
 
 const textField = {type: "string"};
@@ -92,80 +94,90 @@ Important formatting rules:
 5. Every tense has exactly six strings, in the order je/j', tu, il/elle, nous, vous, ils/elles. Put gender and number alternatives in the same row.
 `;
 
-class GeminiFailure extends Error {
+class AIFailure extends Error {
   constructor(kind, message) {
     super(message);
     this.kind = kind;
   }
 }
 
-function classifyResponse(status, error) {
+function classifyGeminiResponse(status, error) {
   const message = error?.message || "";
   const reasons = Array.isArray(error?.details) ? error.details.map(detail => detail?.reason) : [];
   if (status === 401 || reasons.some(reason => /^API_KEY_/.test(reason || "")) ||
       /API key (?:not valid|is invalid|was reported|has expired)/i.test(message)) {
-    return new GeminiFailure("key", "Gemini rejected the API key. Check it in Settings.");
+    return new AIFailure("key", "Gemini rejected the API key. Check it in Settings.");
   }
   if (status === 429 || (status === 400 && /billing|free tier|quota/i.test(message))) {
-    return new GeminiFailure("quota", "Gemini's rate limit or quota was reached. Check your AI Studio limits or try later.");
+    return new AIFailure("quota", "Gemini's rate limit or quota was reached. Check your AI Studio limits or try later.");
   }
-  if (status === 503) return new GeminiFailure("busy", "Gemini reported high demand. Try again in a moment.");
-  if (status === 408 || status === 504) return new GeminiFailure("timeout", "A Gemini request timed out. Please retry.");
+  if (status === 503) return new AIFailure("busy", "Gemini reported high demand. Try again in a moment.");
+  if (status === 408 || status === 504) return new AIFailure("timeout", "A Gemini request timed out. Please retry.");
   if (status === 404 || (status === 403 && /model|tier/i.test(message))) {
-    return new GeminiFailure("unavailable", "A Gemini model is unavailable for this project.");
+    return new AIFailure("unavailable", "A Gemini model is unavailable for this project.");
   }
-  if (status === 403) return new GeminiFailure("key", "Gemini denied access. Check the API key and project permissions in Settings.");
+  if (status === 403) return new AIFailure("key", "Gemini denied access. Check the API key and project permissions in Settings.");
   if (status === 400 && /schema|response.?mime.?type|response.?format|thinking.?config|thinking.?level/i.test(message)) {
-    return new GeminiFailure("format", "Gemini rejected the requested response format.");
+    return new AIFailure("format", "Gemini rejected the requested response format.");
   }
-  if (status >= 500) return new GeminiFailure("service", "Gemini reported a temporary service error. Please retry.");
-  return new GeminiFailure("request", `Gemini rejected the request (HTTP ${status}).`);
+  if (status >= 500) return new AIFailure("service", "Gemini reported a temporary service error. Please retry.");
+  return new AIFailure("request", `Gemini rejected the request (HTTP ${status}).`);
 }
 
 function readGeminiOutput(data) {
   const candidate = data?.candidates?.[0];
   if (data?.promptFeedback?.blockReason || ["SAFETY", "PROHIBITED_CONTENT", "RECITATION"].includes(candidate?.finishReason)) {
-    throw new GeminiFailure("blocked", "Gemini blocked this request. Try a shorter phrase or a cropped screenshot.");
+    throw new AIFailure("blocked", "Gemini blocked this request. Try a shorter phrase or a cropped screenshot.");
   }
   if (candidate?.finishReason && candidate.finishReason !== "STOP") {
-    throw new GeminiFailure("invalid", "Gemini did not finish its answer.");
+    throw new AIFailure("invalid", "Gemini did not finish its answer.");
   }
   const parts = candidate?.content?.parts;
   const text = Array.isArray(parts) ? parts.filter(part => !part?.thought && typeof part?.text === "string")
     .map(part => part.text).join("").trim() : "";
-  if (!text) throw new GeminiFailure("invalid", "Gemini returned an empty answer.");
+  if (!text) throw new AIFailure("invalid", "Gemini returned an empty answer.");
   return JSON.parse(text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""));
 }
 
-async function requestGemini(model, key, contents, generationConfig, timeoutMs, validate) {
+async function requestAI({provider, url, headers, body, timeoutMs, readOutput, classify, validate}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+    const response = await fetch(url, {
       method: "POST",
-      headers: {"Content-Type": "application/json", "x-goog-api-key": key},
+      headers: {"Content-Type": "application/json", ...headers},
+      credentials: "omit",
       signal: controller.signal,
-      body: JSON.stringify({contents, generationConfig})
+      body: JSON.stringify(body)
     });
     const data = await response.json().catch(error => {
       if (controller.signal.aborted) throw error;
       return null;
     });
-    if (!response.ok) throw classifyResponse(response.status, data?.error);
+    if (!response.ok) throw classify(response.status, data?.error);
     try {
-      return validate(readGeminiOutput(data));
+      return validate(readOutput(data));
     } catch (error) {
-      if (error instanceof GeminiFailure) throw error;
-      const detail = error instanceof SyntaxError ? "Gemini returned malformed JSON." : error.message;
-      throw new GeminiFailure("invalid", detail);
+      if (error instanceof AIFailure) throw error;
+      const detail = error instanceof SyntaxError ? `${provider} returned malformed JSON.` : error.message;
+      throw new AIFailure("invalid", provider === "Groq" && !(error instanceof SyntaxError) ? `Groq: ${detail}` : detail);
     }
   } catch (error) {
-    if (controller.signal.aborted) throw new GeminiFailure("timeout", "A Gemini request timed out. Please retry.");
-    if (error instanceof GeminiFailure) throw error;
-    throw new GeminiFailure("network", "The connection to Gemini failed. Check your internet connection and retry.");
+    if (controller.signal.aborted) throw new AIFailure("timeout", `A ${provider} request timed out. Please retry.`);
+    if (error instanceof AIFailure) throw error;
+    throw new AIFailure("network", `The connection to ${provider} failed. Check your internet connection and retry.`);
   } finally {
     clearTimeout(timer);
   }
+}
+
+function requestGemini(model, key, contents, generationConfig, timeoutMs, validate) {
+  return requestAI({
+    provider: "Gemini",
+    url: `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+    headers: {"x-goog-api-key": key}, body: {contents, generationConfig}, timeoutMs,
+    readOutput: readGeminiOutput, classify: classifyGeminiResponse, validate
+  });
 }
 
 async function callGemini(apiKey, contents, schema, validate, plan = TEXT_PLAN) {
@@ -205,6 +217,75 @@ async function callGemini(apiKey, contents, schema, validate, plan = TEXT_PLAN) 
   throw new Error(details.length ? [...new Set(details)].join(" ") : "Gemini did not complete the request before its time limit.");
 }
 
+// Groq strict mode requires all properties and a closed object at every level.
+function groqSchema(schema) {
+  if (Array.isArray(schema.type)) {
+    return {anyOf: schema.type.map(type => groqSchema({...schema, type}))};
+  }
+  if (schema.type === "object") {
+    const properties = Object.fromEntries(Object.entries(schema.properties).map(([key, value]) => [key, groqSchema(value)]));
+    return {...jsonObject(properties), additionalProperties: false};
+  }
+  if (schema.type === "array") return {type: "array", items: groqSchema(schema.items)};
+  return schema.enum ? {type: schema.type, enum: schema.enum} : {type: schema.type};
+}
+
+function classifyGroqResponse(status, error) {
+  if (status === 401 || status === 403) return new AIFailure("key", "Groq rejected the API key or denied access. Check it in Settings.");
+  if (status === 429) return new AIFailure("quota", "Groq's rate limit or quota was reached. Try again later.");
+  if (status === 408 || status === 504) return new AIFailure("timeout", "A Groq request timed out. Please retry.");
+  if (status === 404) return new AIFailure("unavailable", "The Groq model is unavailable for this account.");
+  if (status >= 500 || status === 498) return new AIFailure("busy", "Groq is temporarily unavailable. Try again in a moment.");
+  if (status === 400 && /json_validate_failed|schema|response.?format/i.test(`${error?.code || ""} ${error?.message || ""}`)) {
+    return new AIFailure("format", "Groq rejected the requested response format.");
+  }
+  return new AIFailure("request", `Groq rejected the request (HTTP ${status}).`);
+}
+
+function readGroqOutput(data) {
+  const choice = data?.choices?.[0];
+  if (choice?.message?.refusal || choice?.finish_reason === "content_filter") {
+    throw new AIFailure("blocked", "Groq blocked this request. Try a shorter phrase.");
+  }
+  if (choice?.finish_reason && choice.finish_reason !== "stop") {
+    throw new AIFailure("invalid", "Groq did not finish its answer.");
+  }
+  const text = choice?.message?.content;
+  if (typeof text !== "string" || !text.trim()) throw new AIFailure("invalid", "Groq returned an empty answer.");
+  return JSON.parse(text);
+}
+
+async function callGroq(key, prompt, schema, validate, deadline) {
+  const request = responseFormat => {
+    const timeoutMs = deadline - Date.now();
+    if (timeoutMs <= 0) throw new AIFailure("timeout", "The lookup reached its time limit before Groq could answer.");
+    return requestAI({
+      provider: "Groq", url: "https://api.groq.com/openai/v1/chat/completions",
+      headers: {Authorization: `Bearer ${key}`}, timeoutMs,
+      body: {
+        model: GROQ_MODEL, reasoning_effort: "low", messages: [{role: "user", content: prompt}],
+        response_format: responseFormat
+      },
+      readOutput: readGroqOutput, classify: classifyGroqResponse, validate
+    });
+  };
+  try {
+    return await request({type: "json_schema", json_schema: {name: "notebook_response", strict: true, schema: groqSchema(schema)}});
+  } catch (error) {
+    if (error.kind !== "format") throw error;
+    return request({type: "json_object"});
+  }
+}
+
+export function testGroqKey(apiKey) {
+  const key = String(apiKey || "").trim();
+  if (!key) throw new Error("Connect a Groq API key in Settings first.");
+  return callGroq(key, 'Return only JSON: {"ok": true}', jsonObject({ok: booleanField}), result => {
+    if (result?.ok !== true) throw new Error("The key verification response was invalid.");
+    return true;
+  }, Date.now() + 12000);
+}
+
 export function testGeminiKey(apiKey) {
   return callGemini(apiKey, [
     {parts: [{text: 'Return only JSON: {"ok": true}'}]}
@@ -214,7 +295,7 @@ export function testGeminiKey(apiKey) {
   });
 }
 
-export async function lookupVerbWithAI(rawInput, apiKey, { includeCounterpart = false, knownInfinitive, expectedCounterpart } = {}) {
+export async function lookupVerbWithAI(rawInput, geminiKey, {includeCounterpart = false, knownInfinitive, expectedCounterpart, groqKey} = {}) {
   const pairInstructions = includeCounterpart ? `
 Add a required top-level "counterpart" field. When the same infinitive has both established
 non-reflexive and pronominal uses in modern French, return a complete verb entry for the other
@@ -240,16 +321,33 @@ ${VERB_ENTRY_SCHEMA_PROMPT}${pairInstructions}`;
     properties.counterpart = nullableVerb;
     required.push("counterpart");
   }
-  return callGemini(apiKey, [{parts: [{text: prompt}]}], jsonObject(properties, required), result =>
-    validateLookupResult(result, rawInput, {includeCounterpart, knownInfinitive, expectedCounterpart}));
+  const schema = jsonObject(properties, required);
+  const validate = result => validateLookupResult(result, rawInput, {includeCounterpart, knownInfinitive, expectedCounterpart});
+  const contents = [{parts: [{text: prompt}]}];
+  const backupKey = String(groqKey || "").trim();
+  if (!backupKey) return callGemini(geminiKey, contents, schema, validate);
+
+  const deadline = Date.now() + TEXT_PLAN.totalMs;
+  const lookupWithGroq = async () => ({...(await callGroq(backupKey, prompt, schema, validate, deadline)), provider: "Groq"});
+  if (!String(geminiKey || "").trim()) return lookupWithGroq();
+  try {
+    return await callGemini(geminiKey, contents, schema, validate, TEXT_WITH_GROQ_PLAN);
+  } catch (geminiError) {
+    if (geminiError.kind === "blocked") throw geminiError;
+    try {
+      return await lookupWithGroq();
+    } catch (groqError) {
+      throw new Error(`${geminiError.message} Also tried Groq. ${groqError.message}`);
+    }
+  }
 }
 
 function validateLookupResult(result, rawInput, {includeCounterpart, knownInfinitive, expectedCounterpart}) {
   if (typeof result?.isValidFrenchVerb !== "boolean" || !Object.hasOwn(result, "verb")) {
-    throw new Error("Gemini did not say whether it recognized the verb.");
+    throw new Error("The AI did not say whether it recognized the verb.");
   }
   if (!result.isValidFrenchVerb) {
-    if (result.verb !== null || knownInfinitive) throw new Error("Gemini did not return the identified verb.");
+    if (result.verb !== null || knownInfinitive) throw new Error("The AI did not return the identified verb.");
     return {
       ok: false,
       reason: typeof result.reasonIfInvalid === "string" && result.reasonIfInvalid.trim() ||
@@ -259,20 +357,20 @@ function validateLookupResult(result, rawInput, {includeCounterpart, knownInfini
   let verb = checkedAIVerb(result.verb);
   let counterpart = null;
   if (includeCounterpart) {
-    if (!Object.hasOwn(result, "counterpart")) throw new Error("Gemini did not finish checking for both forms. Please retry.");
+    if (!Object.hasOwn(result, "counterpart")) throw new Error("The AI did not finish checking for both forms. Please retry.");
     if (result.counterpart !== null) {
       counterpart = checkedAIVerb(result.counterpart);
       if (!areVerbCounterparts(verb.infinitive, counterpart.infinitive)) {
-        throw new Error("Gemini returned forms from different verbs. Please retry.");
+        throw new Error("The AI returned forms from different verbs. Please retry.");
       }
     }
     if (knownInfinitive && counterpart?.infinitive === knownInfinitive) [verb, counterpart] = [counterpart, verb];
     const expected = expectedCounterpart || getReflexiveCounterpart(verb.infinitive);
     if (expected && counterpart?.infinitive !== expected && lookupOfflineVerb(expected).verb?.infinitive !== expected) {
-      throw new Error(`Gemini did not return “${expected}”. Please retry.`);
+      throw new Error(`The AI did not return “${expected}”. Please retry.`);
     }
   }
-  if (knownInfinitive && verb.infinitive !== knownInfinitive) throw new Error("Gemini returned a different verb. Please retry.");
+  if (knownInfinitive && verb.infinitive !== knownInfinitive) throw new Error("The AI returned a different verb. Please retry.");
   return {ok: true, verb, counterpart, detectedFrom: typeof result.detectedFrom === "string" ? result.detectedFrom : null};
 }
 
