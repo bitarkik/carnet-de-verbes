@@ -1,9 +1,9 @@
-import { TENSE_KEYS, validateVerb } from "./validation.js?v=37";
+import { TENSE_KEYS, validateVerb } from "./validation.js?v=38";
 // ==========================================================================
 // Live Google Gemini AI Integration (Verb Lookup, Screenshot Vision, Word Import)
 // ==========================================================================
 
-import { areVerbCounterparts, getReflexiveCounterpart, lookupOfflineVerb, normalizeVerbEntry, stripAccents } from "./french-engine.js?v=37";
+import { areVerbCounterparts, getReflexiveCounterpart, isReflexiveOnly, lookupOfflineVerb, normalizeVerbEntry, stripAccents } from "./french-engine.js?v=38";
 
 const FLASH_LITE = "gemini-3.5-flash-lite";
 const HYDROGEN = "gemini-4-hydrogen";
@@ -11,6 +11,8 @@ const FLASH = "gemini-3.8-flash";
 const TEXT_PLAN = {models: [FLASH_LITE, HYDROGEN, FLASH], totalMs: 30000, attemptsMs: [9000, 10000, 11000]};
 const TEXT_WITH_GROQ_PLAN = {...TEXT_PLAN, totalMs: 18000, attemptsMs: [8000, 5000, 5000]};
 const GROQ_MODEL = "openai/gpt-oss-20b";
+const GROQ_CHECK_MODEL = "openai/gpt-oss-120b";
+const COUNTERPART_CHECK_MS = 12000;
 const SCREENSHOT_PLAN = {models: [FLASH, HYDROGEN, FLASH_LITE], totalMs: 60000, attemptsMs: [22000, 20000, 18000]};
 
 const textField = {type: "string"};
@@ -183,7 +185,7 @@ function requestGemini(model, key, contents, generationConfig, timeoutMs, valida
 async function callGemini(apiKey, contents, schema, validate, plan = TEXT_PLAN) {
   const key = String(apiKey || "").trim();
   if (!key) throw new Error("Connect a Gemini API key in Settings first.");
-  const deadline = Date.now() + plan.totalMs;
+  const deadline = Math.min(Date.now() + plan.totalMs, plan.deadline ?? Infinity);
   const failures = new Map();
 
   for (const [index, model] of plan.models.entries()) {
@@ -198,7 +200,7 @@ async function callGemini(apiKey, contents, schema, validate, plan = TEXT_PLAN) 
       const remaining = attemptEnd - Date.now();
       if (remaining <= 0) break;
       try {
-        return await requestGemini(model, key, contents, config, remaining, validate);
+        return await requestGemini(model, key, contents, config, remaining, result => validate(result, model));
       } catch (error) {
         if (error.kind === "key" || error.kind === "blocked") throw error;
         // Retry this model without formatting options only if it rejected those options.
@@ -255,7 +257,7 @@ function readGroqOutput(data) {
   return JSON.parse(text);
 }
 
-async function callGroq(key, prompt, schema, validate, deadline) {
+async function callGroq(key, prompt, schema, validate, deadline, model = GROQ_MODEL) {
   const request = responseFormat => {
     const timeoutMs = deadline - Date.now();
     if (timeoutMs <= 0) throw new AIFailure("timeout", "The lookup reached its time limit before Groq could answer.");
@@ -263,7 +265,7 @@ async function callGroq(key, prompt, schema, validate, deadline) {
       provider: "Groq", url: "https://api.groq.com/openai/v1/chat/completions",
       headers: {Authorization: `Bearer ${key}`}, timeoutMs,
       body: {
-        model: GROQ_MODEL, reasoning_effort: "low", messages: [{role: "user", content: prompt}],
+        model, reasoning_effort: "low", messages: [{role: "user", content: prompt}],
         response_format: responseFormat
       },
       readOutput: readGroqOutput, classify: classifyGroqResponse, validate
@@ -322,24 +324,93 @@ ${VERB_ENTRY_SCHEMA_PROMPT}${pairInstructions}`;
     required.push("counterpart");
   }
   const schema = jsonObject(properties, required);
-  const validate = result => validateLookupResult(result, rawInput, {includeCounterpart, knownInfinitive, expectedCounterpart});
+  const validate = (response, model) => ({
+    ...validateLookupResult(response, rawInput, {includeCounterpart, knownInfinitive, expectedCounterpart}), model
+  });
   const contents = [{parts: [{text: prompt}]}];
+  const primaryKey = String(geminiKey || "").trim();
   const backupKey = String(groqKey || "").trim();
-  if (!backupKey) return callGemini(geminiKey, contents, schema, validate);
-
   const deadline = Date.now() + TEXT_PLAN.totalMs;
-  const lookupWithGroq = async () => ({...(await callGroq(backupKey, prompt, schema, validate, deadline)), provider: "Groq"});
-  if (!String(geminiKey || "").trim()) return lookupWithGroq();
-  try {
-    return await callGemini(geminiKey, contents, schema, validate, TEXT_WITH_GROQ_PLAN);
-  } catch (geminiError) {
-    if (geminiError.kind === "blocked") throw geminiError;
+  const plan = {...(backupKey ? TEXT_WITH_GROQ_PLAN : TEXT_PLAN), deadline};
+  const lookupWithGroq = () => callGroq(backupKey, prompt, schema, response => ({
+    ...validate(response, GROQ_MODEL), provider: "Groq"
+  }), deadline);
+
+  let result;
+  if (!primaryKey && backupKey) {
+    result = await lookupWithGroq();
+  } else {
     try {
-      return await lookupWithGroq();
-    } catch (groqError) {
-      throw new Error(`${geminiError.message} Also tried Groq. ${groqError.message}`);
+      result = await callGemini(primaryKey, contents, schema, validate, plan);
+    } catch (geminiError) {
+      if (!backupKey || geminiError.kind === "blocked") throw geminiError;
+      try {
+        result = await lookupWithGroq();
+      } catch (groqError) {
+        throw new Error(`${geminiError.message} Also tried Groq. ${groqError.message}`);
+      }
     }
   }
+
+  if (!includeCounterpart || !result.ok || result.counterpart || isReflexiveOnly(result.verb.infinitive)) return result;
+  return verifyMissingCounterpart(result, primaryKey, backupKey, expectedCounterpart, deadline);
+}
+
+export function checkVerbCounterpart(verb, geminiKey, groqKey) {
+  return verifyMissingCounterpart({verb}, geminiKey, groqKey, undefined, Date.now() + COUNTERPART_CHECK_MS);
+}
+
+async function verifyMissingCounterpart(result, geminiKey, groqKey, expectedCounterpart, lookupDeadline) {
+  const {infinitive} = result.verb;
+  const expected = expectedCounterpart || getReflexiveCounterpart(infinitive);
+  const offline = expected && lookupOfflineVerb(expected).verb;
+  if (offline?.infinitive === expected && areVerbCounterparts(infinitive, expected)) {
+    return {...result, counterpart: offline};
+  }
+
+  // Do not show a model's negative answer to the verifier. Ask it about the lemma independently.
+  const prompt = `Act as a French dictionary. Check whether the French infinitive ${JSON.stringify(infinitive)}
+  has an established ${result.verb.isReflexive ? "non-pronominal" : "pronominal (reflexive or reciprocal)"} form in modern French.
+  Consider common fixed expressions as well as literal reflexive uses. The other form must be a genuine use of the
+  same infinitive, with its own meaning. Do not invent one or return an unrelated synonym.
+  ${expected ? `The verified spelling of the other form is ${JSON.stringify(expected)}.` : ""}
+  Return JSON with one field, "counterpart". It must be null only if there is no established other form.
+  Otherwise return a complete verb entry. Use the "verb" object described below as the field's value,
+  including all six persons in each tense. Do not include the other fields from the example envelope.
+  ${VERB_ENTRY_SCHEMA_PROMPT}`;
+  const schema = jsonObject({counterpart: nullableVerb});
+  const validate = response => {
+    if (!response || !Object.hasOwn(response, "counterpart")) throw new Error("The AI did not return a second form check.");
+    if (response.counterpart === null && !expected) return null;
+    if (response.counterpart === null) throw new Error(`The AI did not return “${expected}”.`);
+    const counterpart = checkedAIVerb(response.counterpart);
+    if (!areVerbCounterparts(infinitive, counterpart.infinitive) || (expected && counterpart.infinitive !== expected)) {
+      throw new Error("The AI did not return the matching form of this verb.");
+    }
+    return counterpart;
+  };
+  const deadline = Math.min(lookupDeadline, Date.now() + COUNTERPART_CHECK_MS);
+  const complete = (counterpart, provider) => counterpart
+    ? {...result, counterpart, provider}
+    : {...result, counterpartCheck: "not-found"};
+  if (groqKey) {
+    const model = result.model === GROQ_MODEL ? GROQ_CHECK_MODEL : GROQ_MODEL;
+    const groqDeadline = geminiKey && result.provider !== "Groq" ? Math.min(deadline, Date.now() + 7000) : deadline;
+    try {
+      return complete(await callGroq(groqKey, prompt, schema, validate, groqDeadline, model), "Groq");
+    } catch (error) {
+      if (error.kind === "blocked") return {...result, counterpartCheck: "incomplete"};
+    }
+  }
+  if (geminiKey && Date.now() < deadline) {
+    const plan = {models: TEXT_PLAN.models.filter(model => model !== result.model), totalMs: COUNTERPART_CHECK_MS, attemptsMs: [6000, 6000, 6000], deadline};
+    try {
+      return complete(await callGemini(geminiKey, [{parts: [{text: prompt}]}], schema, validate, plan), result.provider);
+    } catch {
+      // The main verb is valid. Leave the other form unchecked and allow a later retry.
+    }
+  }
+  return {...result, counterpartCheck: "incomplete"};
 }
 
 function validateLookupResult(result, rawInput, {includeCounterpart, knownInfinitive, expectedCounterpart}) {
@@ -366,7 +437,7 @@ function validateLookupResult(result, rawInput, {includeCounterpart, knownInfini
     }
     if (knownInfinitive && counterpart?.infinitive === knownInfinitive) [verb, counterpart] = [counterpart, verb];
     const expected = expectedCounterpart || getReflexiveCounterpart(verb.infinitive);
-    if (expected && counterpart?.infinitive !== expected && lookupOfflineVerb(expected).verb?.infinitive !== expected) {
+    if (expected && counterpart && counterpart.infinitive !== expected) {
       throw new Error(`The AI did not return “${expected}”. Please retry.`);
     }
   }

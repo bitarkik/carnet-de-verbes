@@ -169,6 +169,7 @@ test("existing déranger and prêter cards gain offline switches while keeping t
 for (const startWithReflexive of [false, true]) {
   const first = startWithReflexive ? "se réconcilier" : "réconcilier";
   const second = startWithReflexive ? "réconcilier" : "se réconcilier";
+  const discoveryCalls = startWithReflexive ? 2 : 1;
   test(`Gemini discovers both forms starting from ${first}`, async ({page}) => {
     await page.addInitScript(() => {
       sessionStorage.setItem("carnet_de_verbes_settings_v1", JSON.stringify({geminiKey: "test-key"}));
@@ -197,12 +198,13 @@ for (const startWithReflexive of [false, true]) {
       calls++;
       const prompt = route.request().postDataJSON().contents[0].parts[0].text;
       const isOnlyReflexive = prompt.includes(`Analyze the user's input: "enfuir"`);
-      const result = isOnlyReflexive ? {verb: onlyReflexive, counterpart: null} : {
-        verb: startWithReflexive ? reflexive : base,
-        counterpart: startWithReflexive ? base : reflexive
+      const result = prompt.startsWith("Act as a French dictionary") ? {counterpart: base} : {
+        isValidFrenchVerb: true,
+        verb: isOnlyReflexive ? onlyReflexive : startWithReflexive ? reflexive : base,
+        counterpart: isOnlyReflexive || startWithReflexive ? null : reflexive
       };
       await route.fulfill({json: {candidates: [{content: {parts: [{
-        text: JSON.stringify({isValidFrenchVerb: true, ...result})
+        text: JSON.stringify(result)
       }]}}]}});
     });
     const input = page.getByRole("searchbox", {name: "French verb", exact: true});
@@ -213,7 +215,7 @@ for (const startWithReflexive of [false, true]) {
     await add(first);
     await expect(page.getByRole("heading", {name: first, exact: true})).toBeVisible();
     await expect(page.locator("#verb-count-label")).toHaveText("1 verb saved");
-    expect(calls).toBe(1);
+    expect(calls).toBe(discoveryCalls);
     await page.getByRole("textbox", {name: `Note for ${first}`}).fill("Keep my note");
 
     await page.reload();
@@ -222,16 +224,64 @@ for (const startWithReflexive of [false, true]) {
     await expect(page.getByRole("heading", {name: second, exact: true})).toBeVisible();
     await expect(page.getByRole("textbox", {name: `Note for ${first}`})).toHaveValue("Keep my note");
     await expect(page.locator("#verb-count-label")).toHaveText("1 verb saved");
-    expect(calls).toBe(1);
+    expect(calls).toBe(discoveryCalls);
 
     await add("enfuir");
     const onlyCard = page.locator(`[data-card-inf="s'enfuir"]`);
     await expect(onlyCard.getByRole("heading", {name: "s'enfuir", exact: true})).toBeVisible();
     await expect(onlyCard.locator(".variant-switch")).toHaveCount(0);
     await expect(page.locator("#verb-count-label")).toHaveText("2 verbs saved");
-    expect(calls).toBe(2);
+    expect(calls).toBe(discoveryCalls + 1);
   });
 }
+
+test("an unfinished form check can be retried from the saved card without losing its note", async ({page}) => {
+  await page.addInitScript(() => {
+    sessionStorage.setItem("carnet_de_verbes_settings_v1", JSON.stringify({geminiKey: "mock-key"}));
+  });
+  const fixture = (infinitive, template) => ({...template, infinitive,
+    tenses: Object.fromEntries(Object.entries(template.tenses).map(([key, forms]) =>
+      [key, forms.map(form => form.replaceAll("disput", "réconcili"))]))
+  });
+  const verb = fixture("réconcilier", OFFLINE_DICTIONARY.disputer);
+  const counterpart = fixture("se réconcilier", lookupOfflineVerb("se disputer").verb);
+  let checksAvailable = false;
+  let calls = 0;
+  await page.route("https://generativelanguage.googleapis.com/**", async route => {
+    calls++;
+    const prompt = route.request().postDataJSON().contents[0].parts[0].text;
+    const isCheck = prompt.startsWith("Act as a French dictionary");
+    if (isCheck && !checksAvailable) {
+      await route.fulfill({status: 503, json: {error: {message: "High demand"}}});
+      return;
+    }
+    const result = isCheck ? {counterpart} : {isValidFrenchVerb: true, verb, counterpart: null};
+    await route.fulfill({json: {candidates: [{content: {parts: [{text: JSON.stringify(result)}]}}]}});
+  });
+
+  await page.goto("/");
+  await expect(page.locator("html")).toHaveAttribute("data-ready", "true");
+  const field = page.getByRole("searchbox", {name: "French verb", exact: true});
+  await field.fill("réconcilier");
+  await field.press("Enter");
+  const card = page.locator('[data-card-inf="réconcilier"]');
+  await expect(card.getByText("Another form could not be verified.")).toBeVisible();
+  await card.getByRole("textbox", {name: "Note for réconcilier"}).fill("Keep my original note");
+
+  const callsBeforeReopening = calls;
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-ready", "true");
+  await field.fill("réconcilier");
+  await field.press("Enter");
+  await expect(card.getByText("Another form could not be verified.")).toBeVisible();
+  expect(calls).toBe(callsBeforeReopening);
+
+  checksAvailable = true;
+  await card.getByRole("button", {name: "Check for another form"}).click();
+  await expect(card.getByRole("button", {name: "se réconcilier", exact: true})).toBeVisible();
+  await expect(card.getByRole("textbox", {name: "Note for réconcilier"})).toHaveValue("Keep my original note");
+  await expect(page.locator("#verb-count-label")).toHaveText("1 verb saved");
+});
 
 test("a Groq key saved in Settings backs up lookups for divorcer and s’inquiéter", async ({page}) => {
   await page.addInitScript(() => {
@@ -266,6 +316,11 @@ test("a Groq key saved in Settings backs up lookups for divorcer and s’inquié
     expect(request.headers().authorization).toBe("Bearer mock-groq");
     expect(request.headers()["x-goog-api-key"]).toBeUndefined();
     const {model, messages} = request.postDataJSON();
+    if (model === "openai/gpt-oss-120b") {
+      expect(messages[0].content).toContain('infinitive "divorcer"');
+      await route.fulfill({json: {choices: [{message: {content: '{"counterpart":null}'}, finish_reason: "stop"}]}});
+      return;
+    }
     expect(model).toBe("openai/gpt-oss-20b");
     const input = Object.keys(responses).find(value => messages[0].content.includes(`input: ${JSON.stringify(value)}`));
     if (input) groqInputs.push(input);
@@ -293,7 +348,10 @@ test("a Groq key saved in Settings backs up lookups for divorcer and s’inquié
     await expect(card.locator(".conj-verb").first()).toHaveText(present);
     await expect(page.locator("#status-msg-text")).toContainText("Lookup completed using Groq.");
     if (counterpart) await expect(card.getByRole("button", {name: counterpart, exact: true})).toBeVisible();
-    else await expect(card.locator(".variant-switch")).toHaveCount(0);
+    else {
+      await expect(card.locator(".variant-switch")).toHaveCount(0);
+      await expect(card.getByText("No other form was found in the latest check.")).toBeVisible();
+    }
   }
   expect(groqInputs).toEqual(["divorcent", "s’inquiéter"]);
   expect(geminiAttempts).toBe(6);

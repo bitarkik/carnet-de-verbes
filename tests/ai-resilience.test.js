@@ -146,13 +146,61 @@ test("Groq alone supports lookup, and retrying a rejected schema still validates
   assert.equal(calls[1].response_format.type, "json_object");
 });
 
-test("a valid Gemini result never contacts configured Groq", async t => {
+test("Gemini results that already contain both forms never contact Groq", async t => {
   const calls = [];
   t.mock.method(globalThis, "fetch", async url => {
     calls.push(new URL(url).hostname);
-    return answer(entry(OFFLINE_DICTIONARY.aller));
+    return answer(entry(OFFLINE_DICTIONARY.occuper, lookupOfflineVerb("s'occuper").verb));
   });
-  const result = await lookupVerbWithAI("aller", "google-key", {groqKey: "groq-key", includeCounterpart: true});
-  assert.equal(result.verb.infinitive, "aller");
+  const result = await lookupVerbWithAI("occuper", "google-key", {groqKey: "groq-key", includeCounterpart: true});
+  assert.equal(result.counterpart.infinitive, "s'occuper");
   assert.deepEqual(calls, ["generativelanguage.googleapis.com"]);
+});
+
+test("a missing form is cross-checked with Groq using only the identified infinitive", async t => {
+  const from = (base, infinitive) => ({...base, infinitive, tenses: Object.fromEntries(Object.entries(base.tenses).map(([key, forms]) =>
+    [key, forms.map(form => form.replaceAll("disput", "réconcili"))]))});
+  const base = from(OFFLINE_DICTIONARY.disputer, "réconcilier");
+  const counterpart = from(lookupOfflineVerb("se disputer").verb, "se réconcilier");
+  const hosts = [];
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    const host = new URL(url).hostname;
+    hosts.push(host);
+    if (host === "generativelanguage.googleapis.com") return answer(entry(base));
+    const request = JSON.parse(options.body);
+    assert.match(request.messages[0].content, /infinitive "réconcilier"/);
+    assert.doesNotMatch(request.messages[0].content, /hier soir/);
+    return groqAnswer({counterpart});
+  });
+  const result = await lookupVerbWithAI("ils se sont réconciliés hier soir", "google-key", {groqKey: "groq-key", includeCounterpart: true});
+  assert.deepEqual(hosts, ["generativelanguage.googleapis.com", "api.groq.com"]);
+  assert.equal(result.counterpart.infinitive, "se réconcilier");
+  assert.equal(result.provider, "Groq");
+});
+
+test("a timed out counterpart check preserves the first verb and respects the lookup deadline", async t => {
+  t.mock.timers.enable({apis: ["Date", "setTimeout"], now: 100000});
+  const attempts = [];
+  t.mock.method(globalThis, "fetch", async (url, {signal}) => {
+    attempts.push({model: apiModel(url), time: Date.now() - 100000});
+    if (attempts.length === 3) {
+      await new Promise(resolve => setTimeout(resolve, 10000));
+      return answer(entry(OFFLINE_DICTIONARY.aller));
+    }
+    return new Promise((_, reject) => signal.addEventListener("abort", () => reject(signal.reason), {once: true}));
+  });
+  const lookup = lookupVerbWithAI("aller", "mock-key", {includeCounterpart: true});
+  for (const elapsed of [9000, 10000, 10000, 1000]) {
+    await nextTurn();
+    t.mock.timers.tick(elapsed);
+  }
+  const result = await lookup;
+  assert.equal(result.verb.infinitive, "aller");
+  assert.equal(result.counterpart, null);
+  assert.equal(result.counterpartCheck, "incomplete");
+  assert.deepEqual(attempts, [
+    {model: models[0], time: 0}, {model: models[1], time: 9000},
+    {model: models[2], time: 19000}, {model: models[0], time: 29000}
+  ]);
+  assert.equal(Date.now(), 130000);
 });

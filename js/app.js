@@ -1,4 +1,4 @@
-import { validateVerb, validateState } from "./validation.js?v=37";
+import { validateVerb, validateState } from "./validation.js?v=38";
 // ==========================================================================
 // Carnet de Verbes — Clean Accordion Notebook Controller (Muse-Inspired)
 // ==========================================================================
@@ -11,17 +11,18 @@ import {
   getReflexiveCounterpart,
   areVerbCounterparts,
   isReflexiveOnly
-} from "./french-engine.js?v=37";
+} from "./french-engine.js?v=38";
 import {
   testGeminiKey,
   testGroqKey,
   lookupVerbWithAI,
+  checkVerbCounterpart,
   extractVerbsFromScreenshots,
   extractVerbsFromWordTextWithAI
-} from "./ai.js?v=37";
-import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=37";
-import { loadLocalState, saveLocalState, loadSettings, saveSettings as writeSettings, syncWithGitHubGist, mergeNotebookStates } from "./sync.js?v=37";
-import { createPracticeController } from "./practice.js?v=37";
+} from "./ai.js?v=38";
+import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=38";
+import { loadLocalState, saveLocalState, loadSettings, saveSettings as writeSettings, syncWithGitHubGist, mergeNotebookStates } from "./sync.js?v=38";
+import { createPracticeController } from "./practice.js?v=38";
 
 const TENSES = [
   { key: "present", label: "Présent" },
@@ -75,6 +76,7 @@ let syncTimer = null;
 let syncInFlight = false;
 let screenshotUrls = [];
 let notebookRevision = 0;
+const counterpartChecksInFlight = new Set();
 
 // ---------- Helpers ----------
 function esc(str) {
@@ -286,6 +288,54 @@ function offlineCounterpart(infinitive) {
   return verb?.infinitive === target && areVerbCounterparts(infinitive, target) ? verb : null;
 }
 
+function applyCounterpartResult(card, other, check) {
+  if (savedCounterpart(card)) return false;
+  if (other && areVerbCounterparts(card.infinitive, other.infinitive)) {
+    const {counterpartData, ...entry} = other;
+    card.counterpartData = structuredClone(entry);
+    delete card.counterpartCheck;
+  } else if (check && card.counterpartCheck !== check) {
+    card.counterpartCheck = check;
+  } else {
+    return false;
+  }
+  card.updatedAt = Date.now();
+  return true;
+}
+
+async function recheckCounterpart(infinitive, button) {
+  const card = verbs.find(v => v.infinitive === infinitive);
+  if (!card || savedCounterpart(card) || counterpartChecksInFlight.has(infinitive)) return;
+  const geminiKey = settings.geminiKey?.trim();
+  const groqKey = settings.groqKey?.trim();
+  if (!geminiKey && !groqKey) {
+    showMsg("Connect Gemini or Groq in Settings to check for another form.", {isError: true});
+    return;
+  }
+  counterpartChecksInFlight.add(infinitive);
+  button.disabled = true;
+  button.textContent = "Checking…";
+  try {
+    const result = await checkVerbCounterpart(card, geminiKey, groqKey);
+    const current = verbs.find(v => v.infinitive === infinitive);
+    if (!current) return;
+    if (applyCounterpartResult(current, result.counterpart, result.counterpartCheck)) persistAndScheduleSync();
+    render();
+    if (savedCounterpart(current)) showMsg(`Found and saved “${current.counterpartData.infinitive}”.`);
+    else if (result.counterpartCheck === "incomplete") showMsg("Couldn't finish checking for another form. You can try again.", {isError: true});
+    else showMsg("The check did not find another form.");
+  } catch (error) {
+    showMsg(`Couldn't check for another form. ${error.message}`, {isError: true});
+  } finally {
+    counterpartChecksInFlight.delete(infinitive);
+    const currentButton = document.querySelector(`[data-check-counterpart="${CSS.escape(infinitive)}"]`);
+    if (currentButton) {
+      currentButton.disabled = false;
+      currentButton.textContent = "Check for another form";
+    }
+  }
+}
+
 async function resolveAddedVerb(input, knownVerb) {
   const offline = knownVerb ? {ok: true, verb: knownVerb} : lookupOfflineVerb(input);
   const apiKey = settings.geminiKey?.trim();
@@ -320,9 +370,9 @@ async function resolveAddedVerb(input, knownVerb) {
       includeCounterpart: true, groqKey, knownInfinitive: verb.infinitive, expectedCounterpart
     });
     if (!result.ok) throw new Error(result.reason);
-    return {...offline, counterpart: result.counterpart, provider: result.provider};
+    return {...offline, counterpart: result.counterpart, provider: result.provider, counterpartCheck: result.counterpartCheck};
   } catch (error) {
-    return {...offline, warning: `Couldn't check both forms. ${error.message}`};
+    return {...offline, counterpartCheck: "incomplete", warning: `Couldn't check both forms. ${error.message}`};
   }
 }
 
@@ -399,14 +449,8 @@ async function handleAddVerb(rawText) {
     }
 
     const other = card.infinitive === selected.infinitive ? counterpart : selected;
-    let changed = !alreadyExisted;
-    if (other && !savedCounterpart(card) && areVerbCounterparts(card.infinitive, other.infinitive)) {
-      const {counterpartData, ...entry} = other;
-      card.counterpartData = structuredClone(entry);
-      card.updatedAt = Date.now();
-      changed = true;
-    }
-    if (changed) persistAndScheduleSync();
+    const counterpartChanged = applyCounterpartResult(card, other, result.counterpartCheck);
+    if (!alreadyExisted || counterpartChanged) persistAndScheduleSync();
 
     input.value = "";
     activeFilter = "all";
@@ -419,8 +463,9 @@ async function handleAddVerb(rawText) {
     const status = pair ? `Both forms are in your notebook: ${card.infinitive} and ${pair.infinitive}.` :
       alreadyExisted ? `${selected.infinitive} is already in your notebook — opened here.` :
       `${selected.infinitive} added to your notebook ✓`;
-    const detail = result.warning || (result.provider === "Groq" ? "Lookup completed using Groq." : "");
-    showMsg(detail ? `${status} ${detail}` : status, {isError: Boolean(result.warning)});
+    const warning = result.warning || (!pair && card.counterpartCheck === "incomplete" ? "The check for another form was incomplete. You can retry from the card." : "");
+    const detail = warning || (result.provider === "Groq" ? "Lookup completed using Groq." : "");
+    showMsg(detail ? `${status} ${detail}` : status, {isError: Boolean(warning)});
     const heading = document.querySelector(`[data-accordion="${CSS.escape(card.infinitive)}"]`);
     heading?.focus({preventScroll: true});
     requestAnimationFrame(() => {
@@ -796,7 +841,15 @@ function render() {
             </div>
 
             <!-- Card Actions -->
-            <div class="card-actions-row" style="justify-content: flex-end;">
+            ${!savedVariant && !isReflexiveOnly(v.infinitive) && v.counterpartCheck ? `
+              <p class="drawer-help">${v.counterpartCheck === "incomplete"
+                ? "Another form could not be verified."
+                : v.counterpartCheck === "not-found" ? "No other form was found in the latest check." : ""}</p>
+            ` : ""}
+            <div class="card-actions-row" style="justify-content: flex-end; flex-wrap: wrap;">
+              ${!savedVariant && !isReflexiveOnly(v.infinitive) && (!counterpart || v.counterpartCheck === "incomplete") ? `
+                <button type="button" class="undo-btn" data-check-counterpart="${esc(v.infinitive)}" ${counterpartChecksInFlight.has(v.infinitive) ? "disabled" : ""}>${counterpartChecksInFlight.has(v.infinitive) ? "Checking…" : "Check for another form"}</button>
+              ` : ""}
               <button type="button" class="danger-btn" data-del="${esc(v.infinitive)}">Delete verb</button>
             </div>
           </div>
@@ -857,6 +910,10 @@ function render() {
         persistAndScheduleSync();
       }
     });
+  });
+
+  container.querySelectorAll("[data-check-counterpart]").forEach(button => {
+    button.addEventListener("click", () => recheckCounterpart(button.dataset.checkCounterpart, button));
   });
 
   // Bind delete verb
@@ -1366,7 +1423,7 @@ function init() {
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register("./sw.js?v=37")
+        .register("./sw.js?v=38")
         .then((reg) => {
           reg.update().catch(() => {});
           // Listen for updates and automatically refresh if new version found
