@@ -1,4 +1,4 @@
-import { validateVerb, validateState } from "./validation.js?v=33";
+import { validateVerb, validateState } from "./validation.js?v=34";
 // ==========================================================================
 // Carnet de Verbes — Clean Accordion Notebook Controller (Muse-Inspired)
 // ==========================================================================
@@ -11,16 +11,16 @@ import {
   getReflexiveCounterpart,
   areVerbCounterparts,
   isReflexiveOnly
-} from "./french-engine.js?v=33";
+} from "./french-engine.js?v=34";
 import {
   testGeminiKey,
   lookupVerbWithAI,
   extractVerbsFromScreenshots,
   extractVerbsFromWordTextWithAI
-} from "./ai.js?v=33";
-import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=33";
-import { loadLocalState, saveLocalState, loadSettings, saveSettings as writeSettings, syncWithGitHubGist, mergeNotebookStates } from "./sync.js?v=33";
-import { createPracticeController } from "./practice.js?v=33";
+} from "./ai.js?v=34";
+import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=34";
+import { loadLocalState, saveLocalState, loadSettings, saveSettings as writeSettings, syncWithGitHubGist, mergeNotebookStates } from "./sync.js?v=34";
+import { createPracticeController } from "./practice.js?v=34";
 
 const TENSES = [
   { key: "present", label: "Présent" },
@@ -267,6 +267,10 @@ function savedCounterpart(verb) {
   return areVerbCounterparts(verb.infinitive, verb.counterpartData?.infinitive) ? verb.counterpartData : null;
 }
 
+function findSavedCard(infinitive) {
+  return verbs.find(v => v.infinitive === infinitive || savedCounterpart(v)?.infinitive === infinitive);
+}
+
 function offlineCounterpart(infinitive) {
   const target = getReflexiveCounterpart(infinitive);
   if (!target) return null;
@@ -297,7 +301,10 @@ async function resolveAddedVerb(input, knownVerb) {
   const counterpart = savedCounterpart(verb) ||
     verbs.find(v => areVerbCounterparts(verb.infinitive, v.infinitive)) ||
     offlineCounterpart(verb.infinitive);
-  if (counterpart || isReflexiveOnly(verb.infinitive)) return {...offline, counterpart};
+  // Reopening a saved entry should only use information already on this device.
+  if (knownVerb || findSavedCard(verb.infinitive) || counterpart || isReflexiveOnly(verb.infinitive)) {
+    return {...offline, counterpart};
+  }
 
   const expectedCounterpart = getReflexiveCounterpart(verb.infinitive);
   if (!apiKey) {
@@ -373,8 +380,7 @@ async function handleAddVerb(rawText) {
     }
 
     const {verb: selected, counterpart} = result;
-    const sameEntry = verbs.find(v => v.infinitive === selected.infinitive ||
-      savedCounterpart(v)?.infinitive === selected.infinitive);
+    const sameEntry = findSavedCard(selected.infinitive);
     const otherEntry = counterpart && verbs.find(v => v.infinitive === counterpart.infinitive);
     const alreadyExisted = Boolean(sameEntry || otherEntry);
     let card = sameEntry || otherEntry;
@@ -1357,7 +1363,7 @@ function init() {
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register("./sw.js?v=33")
+        .register("./sw.js?v=34")
         .then((reg) => {
           reg.update().catch(() => {});
           // Listen for updates and automatically refresh if new version found

@@ -62,22 +62,36 @@ test("a closed added card stays closed when sync finishes and the message disapp
   await expect(heading).toHaveAttribute("aria-expanded", "false");
 });
 
-test("adding a saved verb brings its entire header into view", async ({page}) => {
+test("adding a saved verb opens its full header without calling Gemini", async ({page}) => {
   const verbs = Object.values(OFFLINE_DICTIONARY).slice(0, 18);
-  const target = verbs[9].infinitive;
+  const target = "prendre";
   await page.addInitScript(({stateKey, verbs}) => {
     localStorage.setItem(stateKey, JSON.stringify({verbs, tombstones: {}}));
+    sessionStorage.setItem("carnet_de_verbes_settings_v1", JSON.stringify({geminiKey: "mock-key"}));
   }, {stateKey, verbs});
+  let calls = 0;
+  await page.route("https://generativelanguage.googleapis.com/**", async route => {
+    calls++;
+    await route.fulfill({json: {candidates: [{content: {parts: [{text: JSON.stringify({
+      isValidFrenchVerb: true, verb: OFFLINE_DICTIONARY.prendre, counterpart: null
+    })}]}}]}});
+  });
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("data-ready", "true");
   const input = page.getByRole("searchbox", {name: "French verb", exact: true});
-  await input.fill(target);
-  await input.press("Enter");
-  await expect(page.locator("#status-msg-text")).toContainText("already in your notebook");
-  await expect(page.locator("#status-msg")).toBeHidden({timeout: 6500});
   const card = page.locator(`[data-card-inf="${target}"]`);
+  const heading = card.getByRole("button", {name: target, exact: true});
+  for (const typed of ["prendre", "prends"]) {
+    await input.fill(typed);
+    await input.press("Enter");
+    await expect(page.locator("#status-msg-text")).toContainText("already in your notebook");
+    await expect(heading).toHaveAttribute("aria-expanded", "true");
+    expect(calls).toBe(0);
+    if (typed === "prendre") await heading.click();
+  }
+  await expect(page.locator("#status-msg")).toBeHidden({timeout: 6500});
   await expect(card.locator(".card-head")).toBeInViewport({ratio: 1});
-  await expect(card.getByRole("button", {name: target, exact: true})).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator("#verb-count-label")).toHaveText("18 verbs saved");
 });
 
 test("saved conjugations show grouped subject pronouns only in the row labels", async ({page}) => {
