@@ -52,7 +52,7 @@ test("a closed added card stays closed when sync finishes and the message disapp
   const input = page.getByRole("searchbox", {name: "French verb", exact: true});
   await input.fill("prendre");
   await input.press("Enter");
-  const heading = page.getByRole("button", {name: "prendre", exact: true});
+  const heading = page.getByRole("heading", {name: "prendre", exact: true}).getByRole("button");
   await expect(heading).toHaveAttribute("aria-expanded", "true");
   await heading.click();
   await expect(heading).toHaveAttribute("aria-expanded", "false");
@@ -64,7 +64,7 @@ test("a closed added card stays closed when sync finishes and the message disapp
 
 test("adding a saved verb opens its full header without calling Gemini", async ({page}) => {
   const verbs = Object.values(OFFLINE_DICTIONARY).slice(0, 18);
-  const target = "prendre";
+  const target = "apprendre";
   await page.addInitScript(({stateKey, verbs}) => {
     localStorage.setItem(stateKey, JSON.stringify({verbs, tombstones: {}}));
     sessionStorage.setItem("carnet_de_verbes_settings_v1", JSON.stringify({geminiKey: "mock-key"}));
@@ -73,7 +73,7 @@ test("adding a saved verb opens its full header without calling Gemini", async (
   await page.route("https://generativelanguage.googleapis.com/**", async route => {
     calls++;
     await route.fulfill({json: {candidates: [{content: {parts: [{text: JSON.stringify({
-      isValidFrenchVerb: true, verb: OFFLINE_DICTIONARY.prendre, counterpart: null
+      isValidFrenchVerb: true, verb: OFFLINE_DICTIONARY[target], counterpart: null
     })}]}}]}});
   });
   await page.goto("/");
@@ -81,13 +81,13 @@ test("adding a saved verb opens its full header without calling Gemini", async (
   const input = page.getByRole("searchbox", {name: "French verb", exact: true});
   const card = page.locator(`[data-card-inf="${target}"]`);
   const heading = card.getByRole("button", {name: target, exact: true});
-  for (const typed of ["prendre", "prends"]) {
+  for (const typed of [target, "apprends"]) {
     await input.fill(typed);
     await input.press("Enter");
     await expect(page.locator("#status-msg-text")).toContainText("already in your notebook");
     await expect(heading).toHaveAttribute("aria-expanded", "true");
     expect(calls).toBe(0);
-    if (typed === "prendre") await heading.click();
+    if (typed === target) await heading.click();
   }
   await expect(page.locator("#status-msg")).toBeHidden({timeout: 6500});
   await expect(card.locator(".card-head")).toBeInViewport({ratio: 1});
@@ -164,6 +164,42 @@ test("existing déranger and prêter cards gain offline switches while keeping t
   await expect(preter.getByRole("heading", {name: "se prêter", exact: true})).toBeVisible();
   await expect(preter.getByRole("textbox", {name: "Note for prêter"})).toHaveValue("My note for prêter");
   await expect(page.locator("#verb-count-label")).toHaveText("2 verbs saved");
+});
+
+test("audited offline forms can be found on an existing notebook without re-adding cards", async ({page, context}) => {
+  const verbs = ["présenter", "parler", "attendre", "revoir", "prendre"].map(infinitive =>
+    ({...OFFLINE_DICTIONARY[infinitive], note: `Keep my ${infinitive} note`}));
+  await page.addInitScript(({stateKey, verbs}) => {
+    localStorage.setItem(stateKey, JSON.stringify({verbs, tombstones: {}}));
+    window.speechSynthesis.speak = utterance => { window.lastSpoken = utterance.text; };
+  }, {stateKey, verbs});
+  await page.goto("/");
+  await expect(page.locator("html")).toHaveAttribute("data-ready", "true");
+  await context.setOffline(true);
+  const search = page.getByRole("searchbox", {name: "Search verbs", exact: true});
+  for (const [base, other, past, spoken] of [
+    ["présenter", "se présenter", "vous vous êtes présenté(e)(s)*"],
+    ["parler", "se parler", "vous vous êtes parlé*"],
+    ["prendre", "se prendre", "vous vous êtes pris / prise / prises*", "vous vous êtes pris"]
+  ]) {
+    await search.fill(other);
+    const card = page.locator(`[data-card-inf="${base}"]`);
+    const header = card.getByRole("heading", {name: base, exact: true}).getByRole("button");
+    await expect(header).toBeVisible();
+    if (await header.getAttribute("aria-expanded") === "false") await header.click();
+    await card.getByRole("button", {name: other, exact: true}).click();
+    await expect(card.getByRole("heading", {name: other, exact: true})).toBeVisible();
+    await card.getByRole("button", {name: "Passé composé", exact: true}).click();
+    const cell = card.locator(`[data-speak="${past}"]`);
+    await expect(cell).toBeVisible();
+    await expect(card.getByRole("textbox", {name: `Note for ${base}`})).toHaveValue(`Keep my ${base} note`);
+    if (spoken) {
+      await cell.click();
+      expect(await page.evaluate(() => window.lastSpoken)).toBe(spoken);
+    }
+  }
+  await search.fill("");
+  await expect(page.locator("#verb-count-label")).toHaveText("5 verbs saved");
 });
 
 for (const startWithReflexive of [false, true]) {

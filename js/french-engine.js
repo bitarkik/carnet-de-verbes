@@ -137,14 +137,16 @@ function buildFromSpec(infinitive, spec) {
   const futur = FUT_ENDINGS.map((end, i) => formatPronounVerb(i, futStem + end, isReflexive, irregFut));
   const conditionnel = IMP_ENDINGS.map((end, i) => formatPronounVerb(i, futStem + end, isReflexive, irregFut));
 
-  const agreeSuffix = aux === "être"
+  const agreesWithSubject = aux === "être" && spec.agreeWithSubject !== false;
+  const agreeSuffix = agreesWithSubject
     ? ["(e)", "(e)", "(e)", "(e)s", "(e)(s)", "(e)s"]
     : ["", "", "", "", "", ""];
 
   const passeCompose = auxPres.map((af, i) => {
     const left = formatPronounVerb(i, af, isReflexive, false);
     const mark = (aux === "être" || isIrregular) ? "*" : "";
-    return `${left} ${pp}${agreeSuffix[i]}${mark}`;
+    const participle = agreesWithSubject && spec.agreementForms ? spec.agreementForms[i] : `${pp}${agreeSuffix[i]}`;
+    return `${left} ${participle}${mark}`;
   });
 
   const defaultQuizForm = presForms[3]; // nous form in présent
@@ -172,7 +174,7 @@ function buildFromSpec(infinitive, spec) {
         : `Imparfait stem comes from nous (${impStem}-); future stem is ${futStem}-.`)
     },
     tenses: { present, passeCompose, imparfait, futur, conditionnel },
-    examples: [
+    examples: spec.examples || [
       { fr: spec.ex[0], en: spec.ex[1] },
       spec.ex2
         ? { fr: spec.ex2[0], en: spec.ex2[1] }
@@ -703,6 +705,25 @@ const SPECS = {
     tipPrep: "prêter quelque chose à quelqu'un = to lend something to someone.",
     ex: ["Je peux te prêter mon livre.", "I can lend you my book."]
   },
+  "casser": { m: "to break", ex: ["Il casse une branche sèche.", "He breaks a dry branch."] },
+  "couper": { m: "to cut", ex: ["Elle coupe le pain en tranches.", "She slices the bread."] },
+  "décider": { m: "to decide", tipPrep: "décider de + infinitive", ex: ["Nous décidons de partir tôt.", "We decide to leave early."] },
+  "expliquer": { m: "to explain", ex: ["Il explique la règle aux élèves.", "He explains the rule to the students."] },
+  "laisser": { m: "to leave / to let", ex: ["Je laisse les clés sur la table.", "I leave the keys on the table."] },
+  "mouiller": { m: "to wet / to get something wet", ex: ["La pluie mouille nos chaussures.", "The rain gets our shoes wet."] },
+  "poser": { m: "to put down / to ask (a question)", ex: ["Elle pose son sac par terre.", "She sets her bag down on the floor."] },
+  "présenter": { m: "to introduce / to present", ex: ["Je présente mon frère à mes amis.", "I introduce my brother to my friends."] },
+  "ranger": { m: "to put away / to tidy", ex: ["Nous rangeons les livres sur l'étagère.", "We put the books away on the shelf."] },
+  "retourner": {
+    m: "to go back / to turn something over", aux: "être",
+    tipAux: "Use être when going back (elle est retournée au travail) and avoir with a direct object (elle a retourné la crêpe).",
+    ex: ["Elle retourne au travail après le déjeuner.", "She goes back to work after lunch."]
+  },
+  "revoir": {
+    m: "to see again / to review", irreg: true, pp: "revu",
+    pres: ["revois", "revois", "revoit", "revoyons", "revoyez", "revoient"], impStem: "revoy", futStem: "reverr", futMark: true,
+    ex: ["Je revois mes amis demain.", "I see my friends again tomorrow."]
+  },
   "disputer": {
     m: "to contest / to scold (informal)",
     ex: ["Les deux équipes disputent la finale.", "The two teams are playing in the final."]
@@ -806,7 +827,101 @@ for (const [inf, spec] of Object.entries(SPECS)) {
 // NOT itself in the offline pack. The base verb's meaning is often different
 // ("passer" = to spend/pass, but "se passer" = to happen), so a reflexive
 // entry built from the base verb must NOT inherit the base meaning.
+// A real example gives each audited form a practice question with the right construction.
+function reflexiveStudy(meaning, [subject, form, complement, en], details = {}) {
+  const fr = `${subject} ${form} ${complement}.`;
+  return {
+    m: meaning,
+    ex: [fr, en],
+    examples: [{fr, en}],
+    quiz: {tense: "Présent", sentence: `${subject} ____ ${complement}.`, en, answer: form, explanation: fr},
+    ...details
+  };
+}
+
+function participleVariants(masculine, feminine, masculinePlural, femininePlural) {
+  const combine = (...forms) => [...new Set(forms)].join(" / ");
+  const singular = combine(masculine, feminine);
+  const plural = combine(masculinePlural, femininePlural);
+  return [singular, singular, singular, plural, combine(masculine, feminine, masculinePlural, femininePlural), plural];
+}
+
+const AUDITED_REFLEXIVES = {
+  "s'aider": reflexiveStudy("to use something as an aid", ["Elle", "s'aide", "d'une carte", "She uses a map to help her find her way."], {
+    tipPrep: "s'aider de + noun: use something to help oneself."
+  }),
+  "s'attendre": reflexiveStudy("to expect", ["Nous", "nous attendons", "à un retard", "We expect a delay."], {
+    tipPrep: "s'attendre à + noun or infinitive."
+  }),
+  "se casser": reflexiveStudy("to break a part of one's body", ["Elle", "se casse", "le bras en tombant", "She breaks her arm in a fall."], {
+    agreeWithSubject: false, tipPrep: "se casser + a body part: se casser le bras.",
+    tipAux: "Use être. Cassé does not agree with the subject when the body part follows: elle s'est cassé le bras."
+  }),
+  "se connaître": reflexiveStudy("to know each other / to know oneself", ["Elles", "se connaissent", "depuis l'école", "They've known each other since school."]),
+  "se couper": reflexiveStudy("to cut oneself", ["Il", "se coupe", "en se rasant", "He cuts himself while shaving."], {
+    tipAux: "Use être. Compare elle s'est coupée (herself) and elle s'est coupé le doigt (her finger)."
+  }),
+  "se croire": reflexiveStudy("to think oneself to be", ["Il", "se croit", "invincible", "He thinks he's invincible."]),
+  "se décider": reflexiveStudy("to make up one's mind", ["Elle", "se décide", "à partir", "She makes up her mind to leave."], {
+    tipPrep: "se décider à + infinitive."
+  }),
+  "se devoir": reflexiveStudy("to feel obliged", ["Nous", "nous devons", "d'agir", "We feel obliged to act."], {
+    tipPrep: "se devoir de + infinitive.",
+    agreementForms: participleVariants("dû", "due", "dus", "dues"),
+    tipAux: "Use être. Dû has a circumflex only in the masculine singular: dû, due, dus, dues."
+  }),
+  "se dire": reflexiveStudy("to say to oneself / to say to each other", ["Elle", "se dit", "que tout ira bien", "She tells herself that everything will be fine."], {
+    agreeWithSubject: false,
+    tipAux: "Use être. In the sense of saying something to oneself or each other, there is no subject agreement: elles se sont dit bonjour."
+  }),
+  "se donner": reflexiveStudy("to give oneself something", ["Je", "me donne", "du temps pour réfléchir", "I give myself time to think."], {
+    agreeWithSubject: false,
+    tipAux: "Use être. The thing given is the direct object: elles se sont donné du temps."
+  }),
+  "s'essayer": reflexiveStudy("to try one's hand at something", ["Elle", "s'essaie", "au dessin", "She tries her hand at drawing."], {
+    tipPrep: "s'essayer à + activity."
+  }),
+  "s'expliquer": reflexiveStudy("to explain oneself / to talk things through", ["Ils", "s'expliquent", "après le malentendu", "They talk things through after the misunderstanding."]),
+  "se laisser": reflexiveStudy("to let oneself be affected / to let something happen to oneself", ["Elle", "se laisse", "convaincre par ses amis", "She lets her friends persuade her."], {
+    agreeWithSubject: false, tipPrep: "se laisser + infinitive.",
+    tipAux: "Use être. Under the 1990 spelling recommendations, laissé stays invariable before an infinitive: elle s'est laissé convaincre."
+  }),
+  "se montrer": reflexiveStudy("to show oneself / to behave in a certain way", ["Il", "se montre", "patient avec les enfants", "He is patient with the children."]),
+  "se mouiller": reflexiveStudy("to get oneself wet", ["Elle", "se mouille", "sous la pluie", "She gets wet in the rain."]),
+  "s'offrir": reflexiveStudy("to treat oneself to something", ["Nous", "nous offrons", "un café", "We treat ourselves to a coffee."], {
+    agreeWithSubject: false,
+    tipAux: "Use être. The thing offered is the direct object: elles se sont offert un café."
+  }),
+  "s'ouvrir": reflexiveStudy("to open up / to come open", ["La porte", "s'ouvre", "automatiquement", "The door opens automatically."]),
+  "se parler": reflexiveStudy("to talk to each other", ["Ils", "se parlent", "tous les jours", "They talk to each other every day."], {
+    agreeWithSubject: false, tipPrep: "parler à quelqu'un is indirect, so se means 'to each other' here.",
+    tipAux: "Use être. Parlé does not agree with the subject: elles se sont parlé."
+  }),
+  "se porter": reflexiveStudy("to fare / to be in a condition", ["Elle", "se porte", "bien", "She's doing well."], {
+    tipPrep: "se porter bien or mal: to be doing well or poorly."
+  }),
+  "se poser": reflexiveStudy("to land / to come to rest", ["L'avion", "se pose", "sans problème", "The plane lands without a problem."]),
+  "se prendre": reflexiveStudy("to think of oneself as", ["Il", "se prend", "pour un expert", "He thinks he's an expert."], {
+    tipPrep: "se prendre pour + noun.",
+    agreementForms: participleVariants("pris", "prise", "pris", "prises"),
+    tipAux: "Use être. Pris is used for both masculine singular and masculine plural; the feminine forms are prise and prises."
+  }),
+  "se présenter": reflexiveStudy("to introduce oneself / to show up", ["Elle", "se présente", "à ses nouveaux collègues", "She introduces herself to her new colleagues."]),
+  "se ranger": reflexiveStudy("to move to one side / to side with someone", ["Nous", "nous rangeons", "sur le côté", "We move to the side."]),
+  "se rencontrer": reflexiveStudy("to meet each other", ["Nous", "nous rencontrons", "parfois au marché", "We sometimes meet at the market."]),
+  "se réserver": reflexiveStudy("to set something aside for oneself", ["Je", "me réserve", "une heure pour lire", "I set aside an hour for myself to read."], {
+    agreeWithSubject: false,
+    tipAux: "Use être. The thing reserved is the direct object: elles se sont réservé une heure."
+  }),
+  "se retourner": reflexiveStudy("to turn around", ["Elle", "se retourne", "en entendant son nom", "She turns around when she hears her name."]),
+  "se revoir": reflexiveStudy("to see each other again", ["Ils", "se revoient", "chaque été", "They see each other again every summer."]),
+  "se tourner": reflexiveStudy("to turn toward / to turn to someone", ["Elle", "se tourne", "vers son frère pour demander conseil", "She turns to her brother for advice."], {
+    tipPrep: "se tourner vers + person, place, or option."
+  })
+};
+
 const REFLEXIVE_INFO = {
+  ...AUDITED_REFLEXIVES,
   "se passer": { m: "to happen / to do without", tipPrep: "se passer de qqch = to do without something.", ex: ["Ça s'est bien passé.", "It went well."] },
   "se rendre": { m: "to go (to a place) / to surrender", tipPrep: "se rendre à + place (Je me rends au travail).", ex: ["Je me rends au travail à huit heures.", "I go to work at eight o'clock."] },
   "se demander": { m: "to wonder", ex: ["Je me demande pourquoi.", "I wonder why."] },
@@ -895,6 +1010,7 @@ function buildReflexiveFromBase(reflexiveInf) {
   const baseSpec = SPECS[base];
   const spec = {
     ...baseSpec,
+    ...info,
     m: info.m || baseSpec.m,
     ex: info.ex || baseSpec.ex,
     ex2: info.ex2 || baseSpec.ex2,
@@ -903,7 +1019,7 @@ function buildReflexiveFromBase(reflexiveInf) {
     // buildFromSpec falls back to the reflexive defaults (être + pronoun note),
     // unless this reflexive form has its own preposition tip.
     tipPrep: info.tipPrep,
-    tipAux: undefined,
+    tipAux: info.tipAux,
     tipExtra: info.tipExtra,
     tipHomo: baseSpec.tipHomo
   };
@@ -973,7 +1089,8 @@ export function lookupOfflineVerb(rawInput) {
   // reflexive entry instead; if the base isn't offline either, do NOT fall
   // through to it — let the AI fallback handle it (or say so honestly).
   if (cleaned.startsWith("se ") || cleaned.startsWith("s'")) {
-    const infinitive = Object.keys(REFLEXIVE_INFO).find(inf => stripAccents(inf) === unaccented) || cleaned;
+    const infinitive = Object.keys(REFLEXIVE_INFO).find(inf => stripAccents(inf) === unaccented) ||
+      Object.keys(AUDITED_REFLEXIVES).find(inf => unaccented.startsWith(`${stripAccents(inf)} `)) || cleaned;
     const built = buildReflexiveFromBase(infinitive);
     if (built) {
       return { ok: true, verb: built, detectedFrom: null };
@@ -1202,6 +1319,7 @@ export function areVerbCounterparts(first, second) {
 }
 
 const REFLEXIVE_TWINS = {
+  ...Object.fromEntries(Object.keys(AUDITED_REFLEXIVES).map(form => [verbFamilyKey(form), form])),
   "réveiller": "se réveiller",
   "coucher": "se coucher",
   "habiller": "s'habiller",

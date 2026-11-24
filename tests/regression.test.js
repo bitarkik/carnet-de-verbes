@@ -1,18 +1,57 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { OFFLINE_DICTIONARY, lookupOfflineVerb, extractOfflineVerbsFromText } from "../js/french-engine.js";
+import { OFFLINE_DICTIONARY, lookupOfflineVerb, extractOfflineVerbsFromText, getReflexiveCounterpart } from "../js/french-engine.js";
 import { validateVerb, validateState } from "../js/validation.js";
 import { mergeNotebookStates, syncWithGitHubGist, saveLocalState, loadLocalState, saveSettings, loadSettings } from "../js/sync.js";
 import { generateDocxBlob, extractTextFromDocx } from "../js/word-io.js";
 const verb = () => structuredClone(OFFLINE_DICTIONARY.prendre);
 test("all offline entries satisfy external-data schema", () => {
-  assert.equal(Object.keys(OFFLINE_DICTIONARY).length, 143);
+  assert.equal(Object.keys(OFFLINE_DICTIONARY).length, 154);
   Object.values(OFFLINE_DICTIONARY).forEach(v => validateVerb(v));
 });
 test("individual third-person subjects and reflexives resolve", () => {
   for (const input of ["il est", "elle est", "ils sont", "elles sont", "on est"]) assert.equal(lookupOfflineVerb(input).verb.infinitive, "être");
   assert.equal(lookupOfflineVerb("je me rends").verb.infinitive, "se rendre");
   assert.equal(lookupOfflineVerb("__proto__").ok, false);
+});
+test("all 28 audited pairs are complete and switchable offline in either direction", () => {
+  const pairs = {
+    aider: "s'aider", attendre: "s'attendre", casser: "se casser", connaître: "se connaître",
+    couper: "se couper", croire: "se croire", décider: "se décider", devoir: "se devoir",
+    dire: "se dire", donner: "se donner", essayer: "s'essayer", expliquer: "s'expliquer",
+    laisser: "se laisser", montrer: "se montrer", mouiller: "se mouiller", offrir: "s'offrir",
+    ouvrir: "s'ouvrir", parler: "se parler", porter: "se porter", poser: "se poser",
+    prendre: "se prendre", présenter: "se présenter", ranger: "se ranger", rencontrer: "se rencontrer",
+    réserver: "se réserver", retourner: "se retourner", revoir: "se revoir", tourner: "se tourner"
+  };
+  for (const [base, other] of Object.entries(pairs)) {
+    assert.equal(validateVerb(lookupOfflineVerb(base).verb).infinitive, base);
+    const form = validateVerb(lookupOfflineVerb(other).verb);
+    assert.equal(form.infinitive, other);
+    assert.equal(form.auxiliary, "être");
+    assert.equal(form.isReflexive, true);
+    assert.equal(getReflexiveCounterpart(base), other);
+    assert.equal(getReflexiveCounterpart(other), base);
+    assert.equal(form.quiz.sentence.replace("____", form.quiz.answer), form.duolingoContext.fr);
+  }
+  assert.equal(lookupOfflineVerb("s’attendre à").verb.infinitive, "s'attendre");
+  assert.equal(lookupOfflineVerb("se prendre pour un expert").verb.infinitive, "se prendre");
+  assert.equal(lookupOfflineVerb("se presenter").verb.infinitive, "se présenter");
+  assert.equal(lookupOfflineVerb("elles se sont parlé").verb.infinitive, "se parler");
+  assert.equal(lookupOfflineVerb("nous nous reverrons").verb.infinitive, "se revoir");
+});
+
+test("audited compound forms keep the right agreement for the usage", () => {
+  const plural = form => lookupOfflineVerb(form).verb.tenses.passeCompose[5].replace(/\*/g, "");
+  const expected = {
+    "se parler": "parlé", "se dire": "dit", "se donner": "donné", "s'offrir": "offert",
+    "se réserver": "réservé", "se casser": "cassé", "se laisser": "laissé",
+    "se couper": "coupé(e)s", "se rencontrer": "rencontré(e)s",
+    "se prendre": "pris / prises", "se devoir": "dus / dues"
+  };
+  for (const [form, participle] of Object.entries(expected)) {
+    assert.equal(plural(form), `ils/elles se sont ${participle}`);
+  }
 });
 test("Word extraction never fabricates unknown irregulars", () => {
   assert.deepEqual(extractOfflineVerbsFromText("acquérir (to acquire)"), []);
@@ -146,9 +185,9 @@ test("Gemini refuses unrelated or omitted counterparts when discovering both for
 });
 
 function legacyNotebook() {
-  const verbs=Object.values(OFFLINE_DICTIONARY).map(v=>({...structuredClone(v),updatedAt:1}));
-  while(verbs.length<160) verbs.push({...verb(),infinitive:`legacy-${verbs.length}`,note:`original note ${verbs.length}`,updatedAt:1});
-  verbs[159].infinitive="retourner";
+  const verbs=Object.values(OFFLINE_DICTIONARY).filter(v=>v.infinitive!=="retourner").map(v=>({...structuredClone(v),updatedAt:1}));
+  while(verbs.length<159) verbs.push({...verb(),infinitive:`legacy-${verbs.length}`,note:`original note ${verbs.length}`,updatedAt:1});
+  verbs.push({...structuredClone(OFFLINE_DICTIONARY.retourner), note:"original note 159", updatedAt:1});
   verbs[159].tenses.passeCompose=[...verbs[159].tenses.passeCompose,...verbs[159].tenses.passeCompose];
   return {verbs,tombstones:{}};
 }

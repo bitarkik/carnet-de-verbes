@@ -1,4 +1,4 @@
-import { validateVerb, validateState } from "./validation.js?v=38";
+import { validateVerb, validateState } from "./validation.js?v=39";
 // ==========================================================================
 // Carnet de Verbes — Clean Accordion Notebook Controller (Muse-Inspired)
 // ==========================================================================
@@ -11,7 +11,7 @@ import {
   getReflexiveCounterpart,
   areVerbCounterparts,
   isReflexiveOnly
-} from "./french-engine.js?v=38";
+} from "./french-engine.js?v=39";
 import {
   testGeminiKey,
   testGroqKey,
@@ -19,10 +19,10 @@ import {
   checkVerbCounterpart,
   extractVerbsFromScreenshots,
   extractVerbsFromWordTextWithAI
-} from "./ai.js?v=38";
-import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=38";
-import { loadLocalState, saveLocalState, loadSettings, saveSettings as writeSettings, syncWithGitHubGist, mergeNotebookStates } from "./sync.js?v=38";
-import { createPracticeController } from "./practice.js?v=38";
+} from "./ai.js?v=39";
+import { generateDocxBlob, extractTextFromDocx } from "./word-io.js?v=39";
+import { loadLocalState, saveLocalState, loadSettings, saveSettings as writeSettings, syncWithGitHubGist, mergeNotebookStates } from "./sync.js?v=39";
+import { createPracticeController } from "./practice.js?v=39";
 
 const TENSES = [
   { key: "present", label: "Présent" },
@@ -96,7 +96,8 @@ export function speakFrench(text) {
     .replace(/\*/g, "")
     .replace(/\(e\)|\(s\)/g, "")
     .trim()
-    .replace(SUBJECT_PREFIX, subject => subject.includes("/") ? `${subject.split("/")[0].trim()} ` : subject);
+    .replace(SUBJECT_PREFIX, subject => subject.includes("/") ? `${subject.split("/")[0].trim()} ` : subject)
+    .split(" / ", 1)[0];
   if (!cleaned) return;
 
   window.speechSynthesis.cancel();
@@ -524,7 +525,7 @@ function undoDelete() {
 // ---------- Filter & Sort ----------
 function getFilteredVerbs() {
   const rawQ = $("search-input")?.value || "";
-  const q = stripAccents(rawQ);
+  const q = stripAccents(rawQ).replace(/’/g, "'");
 
   const filtered = verbs.filter((v) => {
     if (activeFilter === "etre" && v.auxiliary !== "être") return false;
@@ -557,7 +558,8 @@ function getFilteredVerbs() {
         (arr || []).some((form) => stripAccents(form).includes(q))
       );
     };
-    return matchesObj(v) || matchesObj(savedCounterpart(v));
+    const otherInfinitive = getReflexiveCounterpart(v.infinitive);
+    return matchesObj(v) || matchesObj(savedCounterpart(v)) || Boolean(otherInfinitive && stripAccents(otherInfinitive).includes(q));
   });
 
   return filtered.sort((a, b) => {
@@ -1423,7 +1425,7 @@ function init() {
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register("./sw.js?v=38")
+        .register("./sw.js?v=39")
         .then((reg) => {
           reg.update().catch(() => {});
           // Listen for updates and automatically refresh if new version found
